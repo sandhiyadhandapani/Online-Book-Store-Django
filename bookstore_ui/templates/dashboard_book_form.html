@@ -1,0 +1,232 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BookStore Admin - {% if action == 'edit' %}Edit Book{% else %}Add Book{% endif %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link href="{% static 'css/style.css' %}" rel="stylesheet">
+</head>
+<body>
+<div class="adm">
+  <aside>
+    <div class="brand"><i class="bi bi-book-half text-warning"></i> BookStore Admin</div>
+    <a class="{% if nav == 'dashboard' %}on{% endif %}" href="{% url 'dashboard' %}"><i class="bi bi-grid"></i>Dashboard</a>
+    <a class="{% if nav == 'books' %}on{% endif %}" href="{% url 'dashboard_books' %}"><i class="bi bi-book"></i>Books</a>
+    {% if perms.store.add_book %}
+    <a class="{% if nav == 'book_add' %}on{% endif %}" href="{% url 'book_add' %}"><i class="bi bi-plus-circle"></i>Add Book</a>
+    {% endif %}
+    <a href="{% url 'admin:store_category_changelist' %}"><i class="bi bi-tags"></i>Categories</a>
+    <a href="{% url 'admin:store_subscriber_changelist' %}"><i class="bi bi-envelope"></i>Subscribers</a>
+    <a href="{% url 'admin:store_book_changelist' %}?is_best_seller__exact=1"><i class="bi bi-trophy"></i>Best Sellers</a>
+    <a href="{% url 'admin:store_book_changelist' %}?is_new_arrival__exact=1"><i class="bi bi-stars"></i>New Arrivals</a>
+    <a href="{% url 'admin:store_order_changelist' %}"><i class="bi bi-bag"></i>Orders</a>
+    <a href="{% url 'admin:auth_user_changelist' %}"><i class="bi bi-people"></i>Users</a>
+    <a href="{% url 'admin:index' %}"><i class="bi bi-gear"></i>Settings</a>
+    <a href="{% url 'admin:logout' %}" class="mt-auto"><i class="bi bi-box-arrow-left"></i>Logout</a>
+  </aside>
+
+  <main>
+    <div class="top align-items-center">
+      <div class="d-flex align-items-center gap-2">
+        <h2 class="serif fs-4 mb-0">
+          {% if action == 'edit' %}Edit Book: <span class="text-muted">{{ book.title }}</span>{% else %}Add New Book{% endif %}
+        </h2>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <a href="{% url 'dashboard_books' %}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to Books
+        </a>
+        <span class="text-muted"><i class="bi bi-person-circle"></i> {{ request.user.username|default:"admin" }}</span>
+      </div>
+    </div>
+
+    {% if messages %}
+    <div class="my-3">
+      {% for message in messages %}
+      <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show d-flex align-items-center justify-content-between shadow-sm" role="alert">
+        <div>
+          {% if message.tags == 'error' or message.tags == 'danger' %}
+            <i class="bi bi-exclamation-octagon-fill me-2 text-danger"></i>
+          {% elif message.tags == 'warning' %}
+            <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+          {% elif message.tags == 'success' %}
+            <i class="bi bi-check-circle-fill me-2 text-success"></i>
+          {% else %}
+            <i class="bi bi-info-circle-fill me-2 text-primary"></i>
+          {% endif %}
+          <span>{{ message }}</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger" role="alert">
+        {% for error in form.non_field_errors %}
+        <div><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        <div class="row g-3">
+          <!-- Basic Information -->
+          <div class="col-12">
+            <h6 class="border-bottom pb-2 mb-3 text-navy fw-bold">General Information</h6>
+          </div>
+
+          <div class="col-md-7">
+            <label for="{{ form.title.id_for_label }}" class="form-label fw-semibold">Book Title <span class="text-danger">*</span></label>
+            {{ form.title }}
+            {% if form.title.errors %}
+            <div class="text-danger small mt-1">{{ form.title.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-5">
+            <label for="{{ form.author.id_for_label }}" class="form-label fw-semibold">Author <span class="text-danger">*</span></label>
+            {{ form.author }}
+            {% if form.author.errors %}
+            <div class="text-danger small mt-1">{{ form.author.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-6">
+            <label for="{{ form.category.id_for_label }}" class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+            {{ form.category }}
+            {% if form.category.errors %}
+            <div class="text-danger small mt-1">{{ form.category.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-6">
+            <label for="{{ form.cover_image.id_for_label }}" class="form-label fw-semibold">Cover Image</label>
+            {{ form.cover_image }}
+            {% if form.cover_image.errors %}
+            <div class="text-danger small mt-1">{{ form.cover_image.errors|striptags }}</div>
+            {% endif %}
+            {% if book and book.cover_image %}
+            <div class="mt-2 d-flex align-items-center gap-2">
+              <span class="small text-muted">Current cover:</span>
+              <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" style="height:48px;border-radius:4px;" class="border">
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="col-12">
+            <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">Description</label>
+            {{ form.description }}
+            {% if form.description.errors %}
+            <div class="text-danger small mt-1">{{ form.description.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <!-- Pricing & Stock -->
+          <div class="col-12 pt-3">
+            <h6 class="border-bottom pb-2 mb-3 text-navy fw-bold">Pricing, Inventory & Rating</h6>
+          </div>
+
+          <div class="col-md-3">
+            <label for="{{ form.price.id_for_label }}" class="form-label fw-semibold">Selling Price (₹) <span class="text-danger">*</span></label>
+            {{ form.price }}
+            {% if form.price.errors %}
+            <div class="text-danger small mt-1">{{ form.price.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-3">
+            <label for="{{ form.old_price.id_for_label }}" class="form-label fw-semibold">Original Price (₹)</label>
+            {{ form.old_price }}
+            <small class="text-muted d-block mt-1">Leave empty if no discount.</small>
+            {% if form.old_price.errors %}
+            <div class="text-danger small mt-1">{{ form.old_price.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-3">
+            <label for="{{ form.stock.id_for_label }}" class="form-label fw-semibold">Stock Quantity</label>
+            {{ form.stock }}
+            {% if form.stock.errors %}
+            <div class="text-danger small mt-1">{{ form.stock.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <div class="col-md-3">
+            <label for="{{ form.rating.id_for_label }}" class="form-label fw-semibold">Rating (0.0 to 5.0)</label>
+            {{ form.rating }}
+            {% if form.rating.errors %}
+            <div class="text-danger small mt-1">{{ form.rating.errors|striptags }}</div>
+            {% endif %}
+          </div>
+
+          <!-- Flags & Visibility -->
+          <div class="col-12 pt-3">
+            <h6 class="border-bottom pb-2 mb-3 text-navy fw-bold">Badges & Catalog Visibility</h6>
+          </div>
+
+          <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+              <div class="form-check form-switch mb-1">
+                {{ form.is_active }}
+                <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">Active Status</label>
+              </div>
+              <small class="text-muted d-block">If unchecked, hidden from shoppers but preserved in records.</small>
+              {% if form.is_active.errors %}
+              <div class="text-danger small mt-1">{{ form.is_active.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+              <div class="form-check form-switch mb-1">
+                {{ form.is_best_seller }}
+                <label class="form-check-label fw-semibold" for="{{ form.is_best_seller.id_for_label }}">Best Seller</label>
+              </div>
+              <small class="text-muted d-block">Display badge and feature in Best Sellers section.</small>
+              {% if form.is_best_seller.errors %}
+              <div class="text-danger small mt-1">{{ form.is_best_seller.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="p-3 border rounded bg-light">
+              <div class="form-check form-switch mb-1">
+                {{ form.is_new_arrival }}
+                <label class="form-check-label fw-semibold" for="{{ form.is_new_arrival.id_for_label }}">New Arrival</label>
+              </div>
+              <small class="text-muted d-block">Display badge and feature in New Arrivals section.</small>
+              {% if form.is_new_arrival.errors %}
+              <div class="text-danger small mt-1">{{ form.is_new_arrival.errors|striptags }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Form Actions -->
+          <div class="col-12 pt-4">
+            <div class="d-flex align-items-center gap-2">
+              <button type="submit" class="btn text-white fw-semibold px-4" style="background:var(--orange)">
+                <i class="bi bi-check-lg me-1"></i>{% if action == 'edit' %}Save Changes{% else %}Add Book{% endif %}
+              </button>
+              <a href="{% url 'dashboard_books' %}" class="btn btn-outline-secondary px-4">Cancel</a>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{% static 'js/main.js' %}"></script>
+</body>
+</html>

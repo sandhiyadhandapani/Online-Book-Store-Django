@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% block title %}Explore Our Books - BookStore{% endblock %}
+{% block content %}
+<section class="banner"><div class="container"><h1>Explore Our Books</h1><p>Find your next favorite book from our wide collection.</p></div></section>
+<div class="container">
+  <div class="crumbs"><a href="{% url 'home' %}">Home</a> &rsaquo; Books</div>
+  <div class="row g-4">
+    <aside class="col-lg-3"><form class="filters panel" id="filterForm" method="get">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Categories</h6>
+        <a href="{% url 'books' %}" class="small text-decoration-none text-muted">Clear filters</a>
+      </div>
+      <div class="grp">
+        {% for name, icon, n in cats %}<label><input type="checkbox" name="cat" value="{{ name }}" {% if name in selected_cats %}checked{% endif %}> {{ name }} <small>({{ n }})</small></label>{% endfor %}</div>
+      <div class="grp"><h6>Price Range</h6>
+        <label><input type="radio" name="price" value="0-250" {% if selected_price == "0-250" %}checked{% endif %}> Under ₹250</label>
+        <label><input type="radio" name="price" value="250-500" {% if selected_price == "250-500" %}checked{% endif %}> ₹250 - ₹500</label>
+        <label><input type="radio" name="price" value="500-1000" {% if selected_price == "500-1000" %}checked{% endif %}> ₹500 - ₹1000</label>
+        <label><input type="radio" name="price" value="1000-" {% if selected_price == "1000-" %}checked{% endif %}> Above ₹1000</label></div>
+      <div class="grp mb-0"><h6>Rating</h6>
+        <label><input type="radio" name="rating" value="4" {% if selected_rating == "4" %}checked{% endif %}> <span class="stars" style="--p:80%">★★★★★</span> 4.0 &amp; up</label>
+        <label><input type="radio" name="rating" value="3" {% if selected_rating == "3" %}checked{% endif %}> <span class="stars" style="--p:60%">★★★★★</span> 3.0 &amp; up</label>
+        <label><input type="radio" name="rating" value="2" {% if selected_rating == "2" %}checked{% endif %}> <span class="stars" style="--p:40%">★★★★★</span> 2.0 &amp; up</label></div>
+    </form></aside>
+    <div class="col-lg-9">
+      <form class="toolbar" id="toolbarForm" method="get" action="{% url 'books' %}">
+        <input class="field" name="q" value="{{ q }}" placeholder="Search books..." aria-label="Search books" form="filterForm">
+        <select class="field" name="sort" style="max-width:200px" aria-label="Sort by" form="filterForm">
+          <option {% if sort == "Newest First" %}selected{% endif %}>Newest First</option>
+          <option {% if sort == "Price: Low to High" %}selected{% endif %}>Price: Low to High</option>
+          <option {% if sort == "Price: High to Low" %}selected{% endif %}>Price: High to Low</option>
+          <option {% if sort == "Top Rated" %}selected{% endif %}>Top Rated</option>
+        </select>
+      </form>
+      <div class="row g-3">
+        {% for b in books %}
+          <div class="col-6 col-md-4 col-xl-3">{% include "partials/card.html" %}</div>
+        {% empty %}
+          <div class="col-12 py-5 text-center">
+            <p class="text-muted fs-5 mb-3">No books found. Try a different search or clear the filters.</p>
+            <a href="{% url 'books' %}" class="btn-or d-inline-block">Clear filters</a>
+          </div>
+        {% endfor %}
+      </div>
+      {% if paginator.num_pages > 1 %}
+      <nav class="pager" aria-label="Pagination">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" aria-label="Previous"><i class="bi bi-arrow-left"></i></a>
+        {% endif %}
+        {% for p in pages %}
+          <a href="?page={{ p }}{% if query_string %}&{{ query_string }}{% endif %}" class="{% if p == page_obj.number %}on{% endif %}">{{ p }}</a>
+        {% endfor %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if query_string %}&{{ query_string }}{% endif %}" aria-label="Next"><i class="bi bi-arrow-right"></i></a>
+        {% endif %}
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}{% block title %}{{ book.title }} - BookStore{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="crumbs"><a href="{% url 'home' %}">Home</a> &rsaquo; <a href="{% url 'books' %}">Books</a> &rsaquo; <a href="{% url 'books' %}?cat={{ book.category.name|urlencode }}">{{ book.category.name }}</a> &rsaquo; {{ book.title }}</div>
+  <div class="row g-4">
+    <div class="col-md-4"><div class="d-cover">{% with b=book %}{% include "partials/cover.html" %}{% endwith %}
+      <div class="thumbs">{% for i in "1234" %}{% with b=book %}{% include "partials/cover.html" %}{% endwith %}{% endfor %}</div></div></div>
+    <div class="col-md-5">
+      <h1 class="d-title">{{ book.title }}</h1>
+      <div class="text-muted mb-1">{{ book.author }}</div>
+      <div class="mb-2"><span class="stars" style="--p:{{ book.pct }}%">★★★★★</span> <span class="rt">{{ book.rating }} ({{ book.reviews }} reviews)</span></div>
+      <div class="price mb-3"><b style="font-size:1.8rem">₹{{ book.price }}</b>{% if book.old_price %}<s>₹{{ book.old_price }}</s>{% endif %}{% if book.discount_percent %}<em>{{ book.discount_percent }}% OFF</em>{% endif %}</div>
+      <form method="post" action="{% url 'cart_add' book.id %}" class="d-flex gap-2 align-items-center mb-2">{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <div class="qty" data-qty data-max="{{ book.stock|default:99 }}"><button type="button" data-minus aria-label="Decrease">-</button><input value="1" name="qty" min="1" max="{{ book.stock|default:99 }}" aria-label="Quantity"><button type="button" data-plus aria-label="Increase">+</button></div>
+        {% if book.stock > 0 %}
+          <button type="submit" class="btn-or flex-grow-1"><i class="bi bi-cart3"></i> Add to Cart</button>
+        {% else %}
+          <button type="button" class="btn-or flex-grow-1" disabled style="opacity:0.6;cursor:not-allowed"><i class="bi bi-cart3"></i> Out of stock</button>
+        {% endif %}
+      </form>
+      <button class="btn btn-link p-0 mb-3 text-decoration-none" data-wish><i class="bi bi-heart"></i> Add to Wishlist</button>
+      <table class="meta mb-3">
+        <tr><td>Author</td><td>{{ book.author }}</td></tr><tr><td>Publisher</td><td>{{ book.publisher|default:"Random House" }}</td></tr>
+        <tr><td>Language</td><td>{{ book.language|default:"English" }}</td></tr><tr><td>Pages</td><td>{{ book.pages|default:"320" }}</td></tr><tr><td>Category</td><td>{{ book.category.name|default:"General" }}</td></tr>
+      </table>
+      <p class="text-muted">{{ book.description|default:"Small changes, remarkable results." }}</p>
+    </div>
+    <div class="col-md-3">
+      <div class="info-card"><i class="bi bi-truck"></i><span><b>Free Shipping</b>On orders over ₹499</span></div>
+      <div class="info-card"><i class="bi bi-shield-check"></i><span><b>Secure Payment</b>100% secure checkout</span></div>
+      <div class="info-card"><i class="bi bi-arrow-repeat"></i><span><b>Easy Returns</b>Within 7 days</span></div>
+      <div class="info-card"><i class="bi bi-headset"></i><span><b>24/7 Support</b>We're here to help</span></div>
+    </div>
+  </div>
+
+  <section class="ai-box">
+    <div class="top">
+      <div><h4><i class="bi bi-stars text-primary"></i> AI Book Summary</h4><small>Powered by Google Gemini</small></div>
+      <button id="aiBtn" class="btn-or" data-url="#" data-demo="{{ book.title }} teaches you how small, consistent changes in your daily routine can lead to massive results. It explains the science of habits and gives practical strategies to build good habits, break bad ones, and design a better future through simple and effective routines.">Generate Summary</button>
+    </div>
+    <div class="ai-out" id="aiOut">Select "Generate Summary" to get a quick overview of this book.</div>
+  </section>
+
+  {% if related %}
+  <section class="sec pt-0">
+    <div class="sec-head"><h3>You may also like</h3><a href="{% url 'books' %}?cat={{ book.category.name|urlencode }}">View More &rsaquo;</a></div>
+    <div class="row g-3">
+      {% for b in related %}
+        <div class="col-6 col-lg-3">{% include "partials/card.html" %}</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+<div class="mb-5"></div>
+{% endblock %}

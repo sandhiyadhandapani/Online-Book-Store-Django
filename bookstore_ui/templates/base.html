@@ -1,0 +1,144 @@
+{% load static %}<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}BookStore{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<link href="{% static 'css/style.css' %}" rel="stylesheet">
+</head><body>
+<header class="bs-nav"><div class="container d-flex align-items-center justify-content-between">
+  <div class="d-flex align-items-center gap-2">
+    <button class="menu-toggle" id="sidebarToggle" type="button" aria-label="Toggle navigation" title="Toggle navigation">
+      <i class="bi bi-list" aria-hidden="true"></i>
+    </button>
+    <a href="{% url 'home' %}" class="brand"><i class="bi bi-book-half"></i>BookStore</a>
+  </div>
+  <nav class="links">
+    <a href="{% url 'home' %}" data-nav="home" class="{% if nav == 'home' %}active{% endif %}">Home</a>
+    <a href="{% url 'books' %}" data-nav="books" class="{% if nav == 'books' %}active{% endif %}">Books</a>
+    <a href="{% url 'home' %}#categories" data-nav="categories">Categories</a>
+    <a href="{% url 'home' %}#best-sellers" data-nav="best-sellers">Best Sellers</a>
+    <a href="{% url 'home' %}#new-arrivals" data-nav="new-arrivals">New Arrivals</a>
+    <a href="{% url 'newsletter' %}" data-nav="about" class="{% if nav == 'news' %}active{% endif %}">About</a>
+  </nav>
+  <div class="icons">
+    <a href="{% url 'books' %}" aria-label="Search"><i class="bi bi-search"></i></a>
+    <a href="#" aria-label="Account"><i class="bi bi-person"></i></a>
+    <a href="{% url 'cart' %}" aria-label="Cart"><i class="bi bi-cart3"></i><span class="badge-cart">{{ cart_count }}</span></a>
+  </div>
+</div></header>
+
+{% if messages %}
+<div class="container pt-3">
+  {% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags %}{{ message.tags }}{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="bs-layout" id="bsLayout">
+  <!-- Collapsible Left Sidebar -->
+  <aside class="bs-sidebar" id="bsSidebar" aria-label="Sidebar navigation">
+    <div class="bs-sidebar-inner">
+      <div class="bs-sidebar-header">
+        <a href="{% url 'home' %}" class="bs-sidebar-brand">
+          <i class="bi bi-book-half"></i>
+          <span>BookStore</span>
+        </a>
+        <button type="button" class="bs-sidebar-close" id="sidebarCloseBtn" aria-label="Close sidebar" title="Toggle sidebar">
+          <i class="bi bi-x-lg d-lg-none"></i>
+          <i class="bi bi-chevron-left d-none d-lg-inline-block"></i>
+        </button>
+      </div>
+
+      <div class="bs-sidebar-scroll">
+        <div class="bs-sidebar-label">Navigation</div>
+        <nav class="bs-sidebar-nav" aria-label="Main Navigation">
+          <a href="{% url 'home' %}" data-nav="home" class="bs-sidebar-link {% if nav == 'home' %}active{% endif %}" id="sideHome">
+            <i class="bi bi-house-door" aria-hidden="true"></i>
+            <span>Home</span>
+          </a>
+          <a href="{% url 'books' %}" data-nav="books" class="bs-sidebar-link {% if nav == 'books' %}active{% endif %}" id="sideBooks">
+            <i class="bi bi-book" aria-hidden="true"></i>
+            <span>Books</span>
+          </a>
+          <a href="{% url 'home' %}#categories" data-nav="categories" class="bs-sidebar-link" id="sideCategories">
+            <i class="bi bi-grid" aria-hidden="true"></i>
+            <span>Categories</span>
+          </a>
+          <a href="{% url 'home' %}#best-sellers" data-nav="best-sellers" class="bs-sidebar-link" id="sideBestSellers">
+            <i class="bi bi-trophy" aria-hidden="true"></i>
+            <span>Best Sellers</span>
+          </a>
+          <a href="{% url 'home' %}#new-arrivals" data-nav="new-arrivals" class="bs-sidebar-link" id="sideNewArrivals">
+            <i class="bi bi-stars" aria-hidden="true"></i>
+            <span>New Arrivals</span>
+          </a>
+          <a href="{% url 'newsletter' %}" data-nav="about" class="bs-sidebar-link {% if nav == 'news' %}active{% endif %}" id="sideAbout">
+            <i class="bi bi-info-circle" aria-hidden="true"></i>
+            <span>About</span>
+          </a>
+        </nav>
+
+        <div class="bs-sidebar-label mt-3">Quick Links</div>
+        <div class="bs-sidebar-quick">
+          <a href="{% url 'books' %}">
+            <i class="bi bi-search"></i>
+            <span>Search Books</span>
+          </a>
+          <a href="#">
+            <i class="bi bi-person"></i>
+            <span>My Account</span>
+          </a>
+          <a href="{% url 'cart' %}">
+            <i class="bi bi-cart3"></i>
+            <span>Shopping Cart</span>
+            <span class="badge-cart ms-auto">{{ cart_count }}</span>
+          </a>
+        </div>
+
+        <div class="bs-sidebar-card">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <i class="bi bi-truck text-warning"></i>
+            <span class="bs-sidebar-card-title">Free Shipping</span>
+          </div>
+          <p class="bs-sidebar-card-text">On orders over ₹499. Read more, spend less.</p>
+        </div>
+      </div>
+
+      <div class="bs-sidebar-footer">
+        <a href="{% url 'books' %}" aria-label="Search"><i class="bi bi-search" aria-hidden="true"></i></a>
+        <a href="#" aria-label="Account"><i class="bi bi-person" aria-hidden="true"></i></a>
+        <a href="{% url 'cart' %}" aria-label="Cart"><i class="bi bi-cart3" aria-hidden="true"></i><span class="badge-cart">{{ cart_count }}</span></a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Mobile Backdrop Overlay -->
+  <div class="bs-sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+  <!-- Main Content beside sidebar -->
+  <div class="bs-main-wrapper" id="bsMainWrapper">
+    <main id="mainContent">
+      {% block content %}{% endblock %}
+    </main>
+    {% block newsletter %}{% include "partials/newsletter_band.html" %}{% endblock %}
+    <footer class="foot"><div class="container">
+      <div class="row g-4">
+        <div class="col-md-4"><div class="brand serif text-white fw-bold mb-2"><i class="bi bi-book-half text-warning"></i> BookStore</div>
+          <p class="mb-0">Books that inspire, educate and entertain.<br>Your trusted online bookstore.</p></div>
+        <div class="col-6 col-md-2"><h6>Quick Links</h6><a href="{% url 'home' %}">Home</a><a href="{% url 'newsletter' %}">About</a><a href="#">Contact</a><a href="#">Help</a></div>
+        <div class="col-6 col-md-3"><h6>Categories</h6>{% for c in cats|slice:":4" %}<a href="{% url 'books' %}">{{ c.0 }}</a>{% endfor %}</div>
+        <div class="col-md-3"><h6>Follow Us</h6><div class="social"><a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a><a href="#" aria-label="Instagram"><i class="bi bi-instagram"></i></a><a href="#" aria-label="X"><i class="bi bi-twitter-x"></i></a><a href="#" aria-label="YouTube"><i class="bi bi-youtube"></i></a></div></div>
+      </div>
+      <div class="copy"><span>© 2025 BookStore. All rights reserved.</span><span>Privacy Policy &nbsp;|&nbsp; Terms &amp; Conditions</span></div>
+    </div></footer>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{% static 'js/main.js' %}"></script>
+</body></html>

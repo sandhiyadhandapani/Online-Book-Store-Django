@@ -1,0 +1,85 @@
+{% extends "base.html" %}{% block title %}Checkout - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="serif fs-4 mb-3">Your Cart <small class="text-muted fs-6">({{ cart_total_items }} item{{ cart_total_items|pluralize }})</small></h2>
+
+  {% if items %}
+  <div class="steps"><span class="on d-flex gap-2 align-items-center"><span class="n">1</span>Shipping</span><hr><span class="d-flex gap-2 align-items-center"><span class="n">2</span>Payment</span><hr><span class="d-flex gap-2 align-items-center"><span class="n">3</span>Confirmation</span></div>
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <form method="post" action="#" id="shippingForm">{% csrf_token %}
+        <div class="panel">
+          <h6>Shipping Information</h6>
+          <div class="row g-3">
+            <div class="col-12"><label class="lbl">Full Name *</label><input class="field" name="name" placeholder="Arun Kumar" required></div>
+            <div class="col-md-6"><label class="lbl">Email Address *</label><input class="field" type="email" name="email" placeholder="info@bookstore.com" required></div>
+            <div class="col-md-6"><label class="lbl">Phone Number *</label><input class="field" name="phone" placeholder="9876543210" required></div>
+            <div class="col-12"><label class="lbl">Delivery Address *</label><input class="field" name="addr1" placeholder="Address Line 1" required></div>
+            <div class="col-12"><input class="field" name="addr2" placeholder="Address Line 2 (Optional)"></div>
+            <div class="col-md-4"><label class="lbl">City *</label><input class="field" name="city" required></div>
+            <div class="col-md-4"><label class="lbl">State *</label><input class="field" name="state" required></div>
+            <div class="col-md-4"><label class="lbl">PIN Code *</label><input class="field" name="pin" required></div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="col-lg-5">
+      <div class="panel">
+        <h6>Order Summary</h6>
+        {% for item in items %}
+        <div class="bcard row-card border-0 p-0 mb-3">
+          {% with b=item %}
+            {% include "partials/cover.html" %}
+          {% endwith %}
+          <div class="row-details">
+            <h5>{{ item.title }}</h5>
+            <div class="au mb-1">{{ item.author }}</div>
+            <form method="post" action="{% url 'cart_update' item.id %}" class="d-inline-flex align-items-center">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <div class="qty qty-sm" data-qty data-max="{{ item.book.stock|default:99 }}" data-auto-submit="true">
+                <button type="button" data-minus aria-label="Decrease quantity">-</button>
+                <input value="{{ item.quantity }}" name="quantity" min="1" max="{{ item.book.stock|default:99 }}" aria-label="Quantity" readonly>
+                <button type="button" data-plus aria-label="Increase quantity">+</button>
+              </div>
+            </form>
+          </div>
+          <div class="row-actions">
+            <span class="row-price">₹{{ item.line_total }}</span>
+            <form method="post" action="{% url 'cart_remove' item.id %}" data-confirm="Remove this book from your cart?">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="remove-btn" aria-label="Remove {{ item.title }} from cart">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+        <hr>
+        <div class="sum-row"><span>Subtotal</span><span>₹{{ subtotal }}</span></div>
+        {% if discount > 0 %}
+        <div class="sum-row"><span>You save</span><span class="text-success">₹{{ discount }}</span></div>
+        {% endif %}
+        <div class="sum-row"><span>Shipping</span><span>{% if shipping == 0 %}Free{% else %}₹{{ shipping }}{% endif %}</span></div>
+        <div class="sum-row tot"><span>Total</span><span>₹{{ total }}</span></div>
+        <button type="submit" form="shippingForm" class="btn-or w-100 mt-3" {% if not items %}disabled{% endif %}>Place Order (Demo)</button>
+        <p class="note">This is a demo checkout. No payment will be processed.</p>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="text-center py-5 my-4 panel">
+    <div class="mb-3" style="font-size: 3.5rem; color: var(--muted); opacity: 0.7;">
+      <i class="bi bi-cart-x"></i>
+    </div>
+    <h3 class="serif mb-2" style="font-weight: 700;">Your cart is empty</h3>
+    <p class="text-muted mb-4">Add a few books and they will show up here.</p>
+    <a href="{% url 'books' %}" class="btn-or d-inline-block px-4 py-2">
+      <i class="bi bi-book me-1"></i> Browse Books
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

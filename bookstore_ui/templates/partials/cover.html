@@ -1,0 +1,13 @@
+{% if b %}
+  {% if b.cover_image %}
+    <div class="cover p-0" style="background:#f4f4f4"><img src="{{ b.cover_image.url }}" alt="{{ b.title }}" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+  {% else %}
+    <div class="cover" style="--a:{{ b.c1 }};--b:{{ b.c2 }}"><span>{{ b.title }}</span><small>{{ b.author }}</small></div>
+  {% endif %}
+{% else %}
+  {% if book.cover_image %}
+    <div class="cover p-0" style="background:#f4f4f4"><img src="{{ book.cover_image.url }}" alt="{{ book.title }}" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+  {% else %}
+    <div class="cover" style="--a:{{ book.c1 }};--b:{{ book.c2 }}"><span>{{ book.title }}</span><small>{{ book.author }}</small></div>
+  {% endif %}
+{% endif %}

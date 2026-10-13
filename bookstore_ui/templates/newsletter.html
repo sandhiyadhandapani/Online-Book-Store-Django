@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Newsletter - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+{% block content %}
+<section class="news-hero" id="about"><div class="container"><div class="row align-items-center g-4">
+  <div class="col-lg-6">
+    <h1>Stay Updated<br>with <span class="or">BookStore</span></h1>
+    <p>Subscribe to our newsletter and get the latest book releases, exclusive offers and more.</p>
+    <form class="hero-search" method="post" action="{% url 'newsletter' %}">{% csrf_token %}<input type="email" name="email" placeholder="Enter your email address" required aria-label="Email address"><button class="btn-or">Subscribe</button></form>
+  </div>
+  <div class="col-lg-6"><div class="pile" aria-hidden="true">
+    <div class="cover" style="--a:#1b2f5c;--b:#e8892b"><span>Dune</span><small>Frank Herbert</small></div>
+    <div class="cover" style="--a:#f3c98b;--b:#e59a3c"><span>Atomic Habits</span><small>James Clear</small></div>
+    <div class="cover" style="--a:#10253f;--b:#3e8fd1"><span>Clean Code</span><small>Robert C. Martin</small></div>
+  </div></div>
+</div></div></section>
+<section class="sec"><div class="container"><div class="row g-3">
+  <div class="col-md-4 perk"><i class="bi bi-book"></i><b>Latest Book Releases</b><small>Be the first to know</small></div>
+  <div class="col-md-4 perk"><i class="bi bi-gift"></i><b>Exclusive Offers</b><small>Special discounts for subscribers</small></div>
+  <div class="col-md-4 perk"><i class="bi bi-person-heart"></i><b>Personalized Recommendations</b><small>Books you'll love</small></div>
+</div></div></section>
+{% endblock %}

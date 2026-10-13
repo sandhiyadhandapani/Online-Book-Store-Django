@@ -1,0 +1,20 @@
+<div class="bcard">
+  <a href="{% url 'book_detail' b.id %}">
+    {% include "partials/cover.html" %}
+  </a>
+  <a href="{% url 'book_detail' b.id %}" class="text-decoration-none">
+    <h5>{{ b.title }}</h5>
+  </a>
+  <div class="au">{{ b.author }}</div>
+  <div><span class="stars" style="--p:{{ b.pct }}%">★★★★★</span> <span class="rt">{{ b.rating }} ({{ b.reviews }})</span></div>
+  <div class="price"><b>₹{{ b.price }}</b>{% if b.old_price %}<s>₹{{ b.old_price }}</s>{% endif %}</div>
+  <form method="post" action="{% url 'cart_add' b.id %}" class="mt-auto w-100">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    {% if b.stock > 0 %}
+      <button type="submit" class="btn-or btn-sm-or">Add to Cart</button>
+    {% else %}
+      <button type="button" class="btn-or btn-sm-or" disabled style="opacity:0.6;cursor:not-allowed">Out of stock</button>
+    {% endif %}
+  </form>
+</div>

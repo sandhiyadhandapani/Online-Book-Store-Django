@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}BookStore - Books Build Better Tomorrows{% endblock %}
+{% block content %}
+<section class="hero"><div class="container"><div class="row align-items-center g-4">
+  <div class="col-lg-6">
+    <h1>Books Build<br><span class="or">Better Tomorrows</span></h1>
+    <p>Discover thousands of books, from timeless classics to modern bestsellers. Read. Learn. Grow.</p>
+    <form class="hero-search" action="{% url 'books' %}"><input name="q" placeholder="Search for books, authors, or categories..." aria-label="Search books"><button class="btn-or"><i class="bi bi-search"></i></button></form>
+    <a href="{% url 'books' %}" class="btn-or d-inline-block">Explore Books</a>
+  </div>
+  <div class="col-lg-6"><div class="pile" aria-hidden="true">
+    {% for b in best|slice:":3" %}{% include "partials/cover.html" %}{% endfor %}
+  </div></div>
+</div></div></section>
+
+<div class="strip"><div class="container"><div class="row g-3">
+  <div class="col-6 col-md-3 it"><i class="bi bi-truck"></i><span><b>Free Shipping</b>On orders over ₹499</span></div>
+  <div class="col-6 col-md-3 it"><i class="bi bi-shield-check"></i><span><b>Secure Payment</b>100% secure checkout</span></div>
+  <div class="col-6 col-md-3 it"><i class="bi bi-headset"></i><span><b>24/7 Support</b>We are here to help</span></div>
+  <div class="col-6 col-md-3 it"><i class="bi bi-tag"></i><span><b>Best Prices</b>Great value always</span></div>
+</div></div></div>
+
+<section class="sec" id="categories"><div class="container">
+  <div class="sec-head"><h3>Shop by Category</h3><a href="{% url 'books' %}">View All &rsaquo;</a></div>
+  <div class="row g-3">{% for name, icon, n in cats %}
+    <div class="col-6 col-md-4 col-lg-2"><a class="cat-tile" href="{% url 'books' %}?cat={{ name|urlencode }}"><i class="bi {{ icon }}"></i><b>{{ name }}</b><small>{{ n }}+ Books</small></a></div>
+  {% endfor %}</div>
+</div></section>
+
+<section class="sec pt-0" id="best-sellers"><div class="container">
+  <div class="sec-head"><h3>Best Sellers</h3><a href="{% url 'books' %}">View All &rsaquo;</a></div>
+  <div class="row g-3">{% for b in best %}<div class="col-6 col-lg-3">{% include "partials/card.html" %}</div>{% endfor %}</div>
+</div></section>
+
+<section class="sec pt-0" id="new-arrivals"><div class="container">
+  <div class="sec-head"><h3>New Arrivals</h3><a href="{% url 'books' %}">View All &rsaquo;</a></div>
+  <div class="row g-3">{% for b in new %}<div class="col-6 col-lg-3">{% include "partials/card.html" %}</div>{% endfor %}</div>
+</div></section>
+{% endblock %}
