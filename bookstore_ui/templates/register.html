@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Create Account - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; Create Account
+  </div>
+
+  <div class="row justify-content-center py-3">
+    <div class="col-md-8 col-lg-6 col-xl-5">
+      <div class="panel shadow-sm">
+        <div class="text-center mb-3">
+          <div class="d-inline-flex align-items-center justify-content-center bg-light rounded-circle mb-2" style="width: 52px; height: 52px;">
+            <i class="bi bi-person-plus text-warning fs-3"></i>
+          </div>
+          <h2 class="serif fs-4 mb-1">Create an Account</h2>
+          <p class="text-muted small mb-0">Join BookStore to save favorites and track orders</p>
+        </div>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'register' %}">
+          {% csrf_token %}
+          {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+          {% endif %}
+
+          <div class="row g-2 mb-2">
+            <div class="col-sm-6">
+              <label class="lbl" for="{{ form.first_name.id_for_label }}">First Name *</label>
+              {{ form.first_name }}
+              {% if form.first_name.errors %}
+                <div class="text-danger small mt-1">{{ form.first_name.errors.0 }}</div>
+              {% endif %}
+            </div>
+            <div class="col-sm-6">
+              <label class="lbl" for="{{ form.last_name.id_for_label }}">Last Name *</label>
+              {{ form.last_name }}
+              {% if form.last_name.errors %}
+                <div class="text-danger small mt-1">{{ form.last_name.errors.0 }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="mb-2">
+            <label class="lbl" for="{{ form.username.id_for_label }}">Username *</label>
+            {{ form.username }}
+            {% if form.username.errors %}
+              <div class="text-danger small mt-1">{{ form.username.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-2">
+            <label class="lbl" for="{{ form.email.id_for_label }}">Email Address *</label>
+            {{ form.email }}
+            {% if form.email.errors %}
+              <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-2">
+            <label class="lbl" for="{{ form.password1.id_for_label }}">Password *</label>
+            {{ form.password1 }}
+            {% if form.password1.errors %}
+              <div class="text-danger small mt-1">{{ form.password1.errors.0 }}</div>
+            {% elif form.password1.help_text %}
+              <div class="text-muted small mt-1" style="font-size: 11px;">{{ form.password1.help_text }}</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="lbl" for="{{ form.password2.id_for_label }}">Confirm Password *</label>
+            {{ form.password2 }}
+            {% if form.password2.errors %}
+              <div class="text-danger small mt-1">{{ form.password2.errors.0 }}</div>
+            {% endif %}
+          </div>
+
+          <button type="submit" class="btn-or w-100 mt-2">Create Account</button>
+        </form>
+
+        <div class="text-center mt-3 pt-3 border-top">
+          <p class="small text-muted mb-0">
+            Already have an account? <a href="{% url 'login' %}{% if next %}?next={{ next|urlencode }}{% endif %}" class="fw-semibold text-warning text-decoration-none">Sign in here</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

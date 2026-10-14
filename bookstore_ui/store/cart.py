@@ -95,7 +95,7 @@ class Cart:
                 continue
 
             book = active_books.get(pk)
-            if not book or book.stock <= 0:
+            if not book:
                 del self.cart[str_id]
                 modified = True
                 continue
@@ -105,14 +105,16 @@ class Cart:
             except (ValueError, TypeError):
                 qty = 1
 
-            clamped_qty = max(1, min(qty, book.stock))
-            if clamped_qty != qty:
-                self.cart[str_id] = clamped_qty
+            if qty < 1:
+                del self.cart[str_id]
                 modified = True
+                continue
+
+            exceeds_stock = book.stock < qty
 
             price_dec = Decimal(str(book.price))
             old_price_dec = Decimal(str(book.old_price)) if book.old_price is not None else None
-            line_total = price_dec * clamped_qty
+            line_total = price_dec * qty
 
             items.append({
                 "book": book,
@@ -124,7 +126,8 @@ class Cart:
                 "cover_image": book.cover_image,
                 "c1": book.c1,
                 "c2": book.c2,
-                "quantity": clamped_qty,
+                "quantity": qty,
+                "exceeds_stock": exceeds_stock,
                 "line_total": line_total,
                 "item_total": line_total,
             })

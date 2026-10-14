@@ -1,6 +1,12 @@
+import datetime
+import random
 from decimal import Decimal
+from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.utils import timezone
 from django.utils.text import slugify
 
 COVER_PALETTES = [
@@ -149,6 +155,29 @@ class Subscriber(models.Model):
         return self.email
 
 
+def generate_order_number():
+    date_str = timezone.now().strftime("%Y%m%d")
+    prefix = f"BS-{date_str}-"
+    try:
+        last_order = Order.objects.filter(order_number__startswith=prefix).order_by("-id").first()
+        if last_order and last_order.order_number:
+            try:
+                seq_part = last_order.order_number.split("-")[-1]
+                new_seq = int(seq_part) + 1
+            except (ValueError, IndexError):
+                new_seq = 1
+        else:
+            new_seq = 1
+
+        candidate = f"{prefix}{new_seq:04d}"
+        while Order.objects.filter(order_number=candidate).exists():
+            new_seq += 1
+            candidate = f"{prefix}{new_seq:04d}"
+        return candidate
+    except Exception:
+        return f"{prefix}{random.randint(1000, 9999):04d}"
+
+
 class Order(models.Model):
     STATUS_CHOICES = [
         ("Pending", "Pending"),
@@ -158,6 +187,14 @@ class Order(models.Model):
         ("Cancelled", "Cancelled"),
     ]
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders"
+    )
+    order_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
     name = models.CharField(max_length=255)
     email = models.EmailField()
     phone = models.CharField(max_length=20)
@@ -166,6 +203,9 @@ class Order(models.Model):
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=100)
     pin = models.CharField(max_length=20)
+    payment_method = models.CharField(max_length=50, default="Cash on Delivery")
+    shipping_fee = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="Pending")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -173,8 +213,13 @@ class Order(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            self.order_number = generate_order_number()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Order #{self.id} - {self.name}"
+        return f"Order #{self.order_number or self.id} - {self.name}"
 
     @property
     def line1(self):
@@ -199,5 +244,44 @@ class OrderItem(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
+    @property
+    def line_total(self):
+        return self.price * self.quantity
+
     def __str__(self):
-        return f"{self.quantity}x {self.book.title} (Order #{self.order.id})"
+        return f"{self.quantity}x {self.book.title} (Order #{self.order.order_number or self.order.id})"
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile")
+    phone = models.CharField(max_length=20, blank=True)
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    pin = models.CharField(max_length=20, blank=True)
+
+    def __str__(self):
+        return f"Profile of {self.user.username}"
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_or_save_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
+    else:
+        UserProfile.objects.get_or_create(user=instance)
+
+
+class Wishlist(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wishlist_items")
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="wishlisted_by")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "book")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.book.title}"
+

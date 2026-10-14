@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Order Confirmation #{{ order.order_number }} - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; <a href="{% url 'orders' %}">Orders</a> &rsaquo; Confirmation
+  </div>
+
+  <div class="steps mb-4">
+    <span class="on d-flex gap-2 align-items-center"><span class="n"><i class="bi bi-check"></i></span>Shipping</span>
+    <hr>
+    <span class="on d-flex gap-2 align-items-center"><span class="n"><i class="bi bi-check"></i></span>Payment</span>
+    <hr>
+    <span class="on d-flex gap-2 align-items-center"><span class="n">3</span>Confirmation</span>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-9">
+      <div class="panel shadow-sm mb-4 text-center py-4">
+        <div class="d-inline-flex align-items-center justify-content-center bg-success-subtle text-success rounded-circle mb-3" style="width: 64px; height: 64px;">
+          <i class="bi bi-check-circle-fill fs-1"></i>
+        </div>
+        <h2 class="serif fs-3 mb-2">Thank You for Your Order!</h2>
+        <p class="text-muted mb-3">Your order has been placed and is now being processed.</p>
+        <div class="d-inline-flex align-items-center gap-2 bg-light px-3 py-2 rounded-3 border">
+          <span class="text-muted small">Order Number:</span>
+          <b class="text-navy fs-6">{{ order.order_number }}</b>
+          <span class="badge bg-warning text-navy ms-2">{{ order.status }}</span>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-md-7">
+          <div class="panel shadow-sm mb-4">
+            <h6 class="border-bottom pb-2 mb-3">Items Ordered</h6>
+            {% for item in order.items.all %}
+              <div class="bcard row-card border-0 p-0 mb-3 pb-2 border-bottom">
+                {% with b=item.book %}
+                  {% include "partials/cover.html" %}
+                {% endwith %}
+                <div class="row-details">
+                  <h5 class="mb-1"><a href="{% url 'book_detail' item.book.id %}" class="text-decoration-none text-navy">{{ item.book.title }}</a></h5>
+                  <div class="au mb-1">{{ item.book.author }}</div>
+                  <div class="small text-muted">{{ item.quantity }} &times; ₹{{ item.price }}</div>
+                </div>
+                <div class="row-actions">
+                  <span class="row-price">₹{{ item.line_total }}</span>
+                </div>
+              </div>
+            {% endfor %}
+
+            <div class="pt-2">
+              <div class="sum-row"><span>Subtotal</span><span>₹{{ order.subtotal }}</span></div>
+              <div class="sum-row">
+                <span>Shipping</span>
+                <span>{% if order.shipping_fee == 0 %}<b class="text-success">Free</b>{% else %}₹{{ order.shipping_fee }}{% endif %}</span>
+              </div>
+              <div class="sum-row tot"><span>Total Paid (Demo)</span><span>₹{{ order.total_amount }}</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-5">
+          <div class="panel shadow-sm mb-4">
+            <h6 class="border-bottom pb-2 mb-3">Delivery Address</h6>
+            <p class="mb-1 fw-bold text-navy">{{ order.name }}</p>
+            <p class="mb-1 text-muted small">{{ order.address_line1 }}</p>
+            {% if order.address_line2 %}
+              <p class="mb-1 text-muted small">{{ order.address_line2 }}</p>
+            {% endif %}
+            <p class="mb-1 text-muted small">{{ order.city }}, {{ order.state }} - {{ order.pin }}</p>
+            <p class="mb-3 text-muted small"><i class="bi bi-telephone me-1"></i>{{ order.phone }}</p>
+
+            <h6 class="border-bottom pb-2 mb-2 pt-2">Payment Info</h6>
+            <p class="small text-muted mb-1">Method: <b class="text-navy">{{ order.payment_method }}</b></p>
+            <p class="small text-muted mb-0">Date: <span class="text-navy">{{ order.created_at|date:"M d, Y H:i" }}</span></p>
+          </div>
+
+          <div class="d-flex flex-column gap-2">
+            <a href="{% url 'books' %}" class="btn-or text-center py-2 text-decoration-none">
+              <i class="bi bi-arrow-left me-1"></i> Continue Shopping
+            </a>
+            <a href="{% url 'orders' %}" class="btn-line text-center py-2 text-decoration-none text-navy">
+              <i class="bi bi-bag-check me-1"></i> View My Orders
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

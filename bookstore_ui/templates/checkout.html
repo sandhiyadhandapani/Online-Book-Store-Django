@@ -1,71 +1,183 @@
-{% extends "base.html" %}{% block title %}Checkout - BookStore{% endblock %}
+{% extends "base.html" %}
+{% block title %}Checkout - BookStore{% endblock %}
 {% block newsletter %}{% endblock %}
+
 {% block content %}
 <div class="container py-4">
-  <h2 class="serif fs-4 mb-3">Your Cart <small class="text-muted fs-6">({{ cart_total_items }} item{{ cart_total_items|pluralize }})</small></h2>
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; <a href="{% url 'cart' %}">Cart</a> &rsaquo; Checkout
+  </div>
+
+  <h2 class="serif fs-4 mb-3">Checkout <small class="text-muted fs-6">({{ cart_total_items }} item{{ cart_total_items|pluralize }})</small></h2>
 
   {% if items %}
-  <div class="steps"><span class="on d-flex gap-2 align-items-center"><span class="n">1</span>Shipping</span><hr><span class="d-flex gap-2 align-items-center"><span class="n">2</span>Payment</span><hr><span class="d-flex gap-2 align-items-center"><span class="n">3</span>Confirmation</span></div>
+  <div class="steps">
+    <span class="on d-flex gap-2 align-items-center"><span class="n">1</span>Shipping</span>
+    <hr>
+    <span class="on d-flex gap-2 align-items-center"><span class="n">2</span>Payment</span>
+    <hr>
+    <span class="d-flex gap-2 align-items-center"><span class="n">3</span>Confirmation</span>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger py-2 small mb-3">
+      {% for error in form.non_field_errors %}
+        <div>{{ error }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <div class="row g-4">
     <div class="col-lg-7">
-      <form method="post" action="#" id="shippingForm">{% csrf_token %}
-        <div class="panel">
-          <h6>Shipping Information</h6>
-          <div class="row g-3">
-            <div class="col-12"><label class="lbl">Full Name *</label><input class="field" name="name" placeholder="Arun Kumar" required></div>
-            <div class="col-md-6"><label class="lbl">Email Address *</label><input class="field" type="email" name="email" placeholder="info@bookstore.com" required></div>
-            <div class="col-md-6"><label class="lbl">Phone Number *</label><input class="field" name="phone" placeholder="9876543210" required></div>
-            <div class="col-12"><label class="lbl">Delivery Address *</label><input class="field" name="addr1" placeholder="Address Line 1" required></div>
-            <div class="col-12"><input class="field" name="addr2" placeholder="Address Line 2 (Optional)"></div>
-            <div class="col-md-4"><label class="lbl">City *</label><input class="field" name="city" required></div>
-            <div class="col-md-4"><label class="lbl">State *</label><input class="field" name="state" required></div>
-            <div class="col-md-4"><label class="lbl">PIN Code *</label><input class="field" name="pin" required></div>
+      <form method="post" action="{% url 'checkout' %}" id="checkoutForm">
+        {% csrf_token %}
+
+        <!-- Shipping Step Panel -->
+        <div class="panel mb-4 shadow-sm">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge bg-warning text-navy rounded-circle p-1" style="width: 24px; height: 24px; display: inline-grid; place-items: center; font-weight: 700;">1</span>
+            <h6 class="mb-0">Shipping Information</h6>
           </div>
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="lbl" for="{{ form.name.id_for_label }}">Full Name *</label>
+              {{ form.name }}
+              {% if form.name.errors %}
+                <div class="text-danger small mt-1">{{ form.name.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-6">
+              <label class="lbl" for="{{ form.email.id_for_label }}">Email Address *</label>
+              {{ form.email }}
+              {% if form.email.errors %}
+                <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-6">
+              <label class="lbl" for="{{ form.phone.id_for_label }}">Phone Number *</label>
+              {{ form.phone }}
+              {% if form.phone.errors %}
+                <div class="text-danger small mt-1">{{ form.phone.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-12">
+              <label class="lbl" for="{{ form.address_line1.id_for_label }}">Delivery Address *</label>
+              {{ form.address_line1 }}
+              {% if form.address_line1.errors %}
+                <div class="text-danger small mt-1">{{ form.address_line1.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-12">
+              <label class="lbl" for="{{ form.address_line2.id_for_label }}">Address Line 2 (Optional)</label>
+              {{ form.address_line2 }}
+              {% if form.address_line2.errors %}
+                <div class="text-danger small mt-1">{{ form.address_line2.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="lbl" for="{{ form.city.id_for_label }}">City *</label>
+              {{ form.city }}
+              {% if form.city.errors %}
+                <div class="text-danger small mt-1">{{ form.city.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="lbl" for="{{ form.state.id_for_label }}">State *</label>
+              {{ form.state }}
+              {% if form.state.errors %}
+                <div class="text-danger small mt-1">{{ form.state.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="lbl" for="{{ form.pin.id_for_label }}">PIN Code *</label>
+              {{ form.pin }}
+              {% if form.pin.errors %}
+                <div class="text-danger small mt-1">{{ form.pin.errors.0 }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment Step Panel -->
+        <div class="panel shadow-sm">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge bg-warning text-navy rounded-circle p-1" style="width: 24px; height: 24px; display: inline-grid; place-items: center; font-weight: 700;">2</span>
+            <h6 class="mb-0">Payment Method</h6>
+          </div>
+
+          <div class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+            <i class="bi bi-info-circle-fill text-primary fs-5"></i>
+            <div><b>Demo checkout, no real payment.</b> Do NOT enter real card numbers, UPI IDs or CVV.</div>
+          </div>
+
+          <div class="d-flex flex-column gap-2 mb-3">
+            {% for radio in form.payment_method %}
+              <label class="d-flex align-items-center gap-3 p-3 border rounded-3 bg-light-subtle cursor-pointer" style="cursor: pointer;">
+                {{ radio.tag }}
+                <div class="d-flex align-items-center justify-content-between flex-grow-1">
+                  <span class="fw-semibold text-navy">{{ radio.choice_label }}</span>
+                  {% if "Cash" in radio.choice_label %}
+                    <i class="bi bi-cash-stack fs-5 text-success"></i>
+                  {% elif "UPI" in radio.choice_label %}
+                    <i class="bi bi-qr-code-scan fs-5 text-primary"></i>
+                  {% else %}
+                    <i class="bi bi-credit-card-2-front fs-5 text-warning"></i>
+                  {% endif %}
+                </div>
+              </label>
+            {% endfor %}
+          </div>
+          {% if form.payment_method.errors %}
+            <div class="text-danger small">{{ form.payment_method.errors.0 }}</div>
+          {% endif %}
         </div>
       </form>
     </div>
+
+    <!-- Order Summary Panel -->
     <div class="col-lg-5">
-      <div class="panel">
+      <div class="panel shadow-sm sticky-top" style="top: 80px;">
         <h6>Order Summary</h6>
         {% for item in items %}
-        <div class="bcard row-card border-0 p-0 mb-3">
+        <div class="bcard row-card border-0 p-0 mb-3 pb-2 border-bottom">
           {% with b=item %}
             {% include "partials/cover.html" %}
           {% endwith %}
           <div class="row-details">
-            <h5>{{ item.title }}</h5>
+            <h5 class="mb-1"><a href="{% url 'book_detail' item.id %}" class="text-decoration-none text-navy">{{ item.title }}</a></h5>
             <div class="au mb-1">{{ item.author }}</div>
-            <form method="post" action="{% url 'cart_update' item.id %}" class="d-inline-flex align-items-center">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <div class="qty qty-sm" data-qty data-max="{{ item.book.stock|default:99 }}" data-auto-submit="true">
-                <button type="button" data-minus aria-label="Decrease quantity">-</button>
-                <input value="{{ item.quantity }}" name="quantity" min="1" max="{{ item.book.stock|default:99 }}" aria-label="Quantity" readonly>
-                <button type="button" data-plus aria-label="Increase quantity">+</button>
-              </div>
-            </form>
+            <div class="small text-muted">Qty: <b>{{ item.quantity }}</b> &times; ₹{{ item.price }}</div>
           </div>
           <div class="row-actions">
             <span class="row-price">₹{{ item.line_total }}</span>
-            <form method="post" action="{% url 'cart_remove' item.id %}" data-confirm="Remove this book from your cart?">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button type="submit" class="remove-btn" aria-label="Remove {{ item.title }} from cart">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
           </div>
         </div>
         {% endfor %}
-        <hr>
-        <div class="sum-row"><span>Subtotal</span><span>₹{{ subtotal }}</span></div>
+
+        <div class="sum-row mt-3"><span>Subtotal</span><span>₹{{ subtotal }}</span></div>
         {% if discount > 0 %}
         <div class="sum-row"><span>You save</span><span class="text-success">₹{{ discount }}</span></div>
         {% endif %}
-        <div class="sum-row"><span>Shipping</span><span>{% if shipping == 0 %}Free{% else %}₹{{ shipping }}{% endif %}</span></div>
+        <div class="sum-row">
+          <span>Shipping</span>
+          <span>{% if shipping == 0 %}<b class="text-success">Free</b>{% else %}₹{{ shipping }}{% endif %}</span>
+        </div>
         <div class="sum-row tot"><span>Total</span><span>₹{{ total }}</span></div>
-        <button type="submit" form="shippingForm" class="btn-or w-100 mt-3" {% if not items %}disabled{% endif %}>Place Order (Demo)</button>
-        <p class="note">This is a demo checkout. No payment will be processed.</p>
+
+        <button type="submit" form="checkoutForm" class="btn-or w-100 mt-3 py-2 fw-semibold" {% if not items %}disabled{% endif %}>
+          <i class="bi bi-bag-check me-1"></i> Place Order (Demo)
+        </button>
+        <p class="note mt-2 text-center text-muted small">
+          <i class="bi bi-shield-check me-1 text-success"></i>100% Secure Checkout &bull; Demo Mode
+        </p>
       </div>
     </div>
   </div>
@@ -76,7 +188,7 @@
     </div>
     <h3 class="serif mb-2" style="font-weight: 700;">Your cart is empty</h3>
     <p class="text-muted mb-4">Add a few books and they will show up here.</p>
-    <a href="{% url 'books' %}" class="btn-or d-inline-block px-4 py-2">
+    <a href="{% url 'books' %}" class="btn-or d-inline-block px-4 py-2 text-decoration-none">
       <i class="bi bi-book me-1"></i> Browse Books
     </a>
   </div>

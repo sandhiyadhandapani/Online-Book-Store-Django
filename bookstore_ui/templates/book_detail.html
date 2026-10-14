@@ -19,7 +19,16 @@
           <button type="button" class="btn-or flex-grow-1" disabled style="opacity:0.6;cursor:not-allowed"><i class="bi bi-cart3"></i> Out of stock</button>
         {% endif %}
       </form>
-      <button class="btn btn-link p-0 mb-3 text-decoration-none" data-wish><i class="bi bi-heart"></i> Add to Wishlist</button>
+      <form method="post" action="{% url 'wishlist_toggle' book.id %}" class="mb-3" data-wish-form>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn btn-link p-0 text-decoration-none d-inline-flex align-items-center gap-2" style="font-size: 14px;">
+          <i class="bi {% if book.id in wishlist_book_ids %}bi-heart-fill text-danger{% else %}bi-heart text-muted{% endif %} fs-5"></i>
+          <span class="wish-text text-navy fw-medium">
+            {% if book.id in wishlist_book_ids %}In your Wishlist (Click to remove){% else %}Add to Wishlist{% endif %}
+          </span>
+        </button>
+      </form>
       <table class="meta mb-3">
         <tr><td>Author</td><td>{{ book.author }}</td></tr><tr><td>Publisher</td><td>{{ book.publisher|default:"Random House" }}</td></tr>
         <tr><td>Language</td><td>{{ book.language|default:"English" }}</td></tr><tr><td>Pages</td><td>{{ book.pages|default:"320" }}</td></tr><tr><td>Category</td><td>{{ book.category.name|default:"General" }}</td></tr>

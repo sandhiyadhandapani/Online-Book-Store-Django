@@ -22,10 +22,53 @@
     <a href="{% url 'home' %}#new-arrivals" data-nav="new-arrivals">New Arrivals</a>
     <a href="{% url 'newsletter' %}" data-nav="about" class="{% if nav == 'news' %}active{% endif %}">About</a>
   </nav>
-  <div class="icons">
+  <div class="icons d-flex align-items-center gap-2">
     <a href="{% url 'books' %}" aria-label="Search"><i class="bi bi-search"></i></a>
-    <a href="#" aria-label="Account"><i class="bi bi-person"></i></a>
-    <a href="{% url 'cart' %}" aria-label="Cart"><i class="bi bi-cart3"></i><span class="badge-cart">{{ cart_count }}</span></a>
+    <a href="{% url 'wishlist' %}" aria-label="Wishlist" class="position-relative">
+      <i class="bi bi-heart"></i>
+      <span class="badge-cart badge-wishlist" style="background:#e04848; {% if not wishlist_count %}display:none;{% endif %}">{{ wishlist_count }}</span>
+    </a>
+    <a href="{% url 'cart' %}" aria-label="Cart" class="position-relative">
+      <i class="bi bi-cart3"></i><span class="badge-cart">{{ cart_count }}</span>
+    </a>
+    {% if request.user.is_authenticated %}
+      <div class="dropdown ms-1">
+        <button class="btn btn-sm text-white dropdown-toggle d-flex align-items-center gap-1 py-1 px-2 border-0" type="button" id="userMenuBtn" data-bs-toggle="dropdown" aria-expanded="false" style="background: rgba(255,255,255,.1); border-radius: 6px; font-size: 13.5px;">
+          <i class="bi bi-person-circle text-warning"></i>
+          <span class="fw-semibold">{{ request.user.first_name|default:request.user.username }}</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="userMenuBtn" style="min-width: 190px;">
+          <li class="dropdown-header text-muted small pb-1">Signed in as <b>{{ request.user.username }}</b></li>
+          <li><hr class="dropdown-divider my-1"></li>
+          <li><a class="dropdown-item py-1" href="{% url 'account' %}"><i class="bi bi-person me-2 text-primary"></i>My Account</a></li>
+          <li><a class="dropdown-item py-1" href="{% url 'orders' %}"><i class="bi bi-bag-check me-2 text-success"></i>My Orders</a></li>
+          <li><a class="dropdown-item py-1" href="{% url 'wishlist' %}"><i class="bi bi-heart me-2 text-danger"></i>Wishlist {% if wishlist_count %}<span class="badge bg-danger rounded-pill ms-auto">{{ wishlist_count }}</span>{% endif %}</a></li>
+          {% if request.user.is_staff %}
+            <li><hr class="dropdown-divider my-1"></li>
+            <li><a class="dropdown-item py-1" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 me-2 text-warning"></i>Dashboard</a></li>
+            <li><a class="dropdown-item py-1" href="/admin/"><i class="bi bi-gear me-2 text-secondary"></i>Admin Panel</a></li>
+          {% endif %}
+          <li><hr class="dropdown-divider my-1"></li>
+          <li>
+            <form method="post" action="{% url 'logout' %}" class="m-0">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item py-1 text-danger d-flex align-items-center">
+                <i class="bi bi-box-arrow-right me-2"></i>Logout
+              </button>
+            </form>
+          </li>
+        </ul>
+      </div>
+    {% else %}
+      <div class="d-flex align-items-center gap-2 ms-1">
+        <a href="{% url 'login' %}" class="btn-line btn-sm py-1 px-2 text-white border-light-subtle d-inline-flex align-items-center" style="background: rgba(255,255,255,.1); font-size: 13px; text-decoration: none;">
+          <i class="bi bi-box-arrow-in-right me-1"></i>Login
+        </a>
+        <a href="{% url 'register' %}" class="btn-or btn-sm py-1 px-2 d-none d-sm-inline-block" style="font-size: 13px; text-decoration: none;">
+          Register
+        </a>
+      </div>
+    {% endif %}
   </div>
 </div></header>
 
@@ -84,16 +127,53 @@
           </a>
         </nav>
 
-        <div class="bs-sidebar-label mt-3">Quick Links</div>
+        <div class="bs-sidebar-label mt-3">Account &amp; Orders</div>
         <div class="bs-sidebar-quick">
-          <a href="{% url 'books' %}">
-            <i class="bi bi-search"></i>
-            <span>Search Books</span>
-          </a>
-          <a href="#">
-            <i class="bi bi-person"></i>
-            <span>My Account</span>
-          </a>
+          {% if request.user.is_authenticated %}
+            <div class="px-3 py-1 mb-1 text-white-50" style="font-size: 12px;">
+              <span class="text-white fw-semibold d-block">{{ request.user.first_name|default:request.user.username }}</span>
+              <span class="text-truncate d-block" style="max-width: 220px; font-size: 11px;">{{ request.user.email }}</span>
+            </div>
+            <a href="{% url 'account' %}">
+              <i class="bi bi-person"></i>
+              <span>My Account</span>
+            </a>
+            <a href="{% url 'orders' %}">
+              <i class="bi bi-bag-check"></i>
+              <span>My Orders</span>
+            </a>
+            <a href="{% url 'wishlist' %}">
+              <i class="bi bi-heart"></i>
+              <span>Wishlist</span>
+              {% if wishlist_count %}<span class="badge-cart ms-auto" style="position:static; background:#e04848;">{{ wishlist_count }}</span>{% endif %}
+            </a>
+            {% if request.user.is_staff %}
+              <a href="{% url 'dashboard' %}">
+                <i class="bi bi-speedometer2 text-warning"></i>
+                <span>Dashboard</span>
+              </a>
+              <a href="/admin/">
+                <i class="bi bi-gear text-secondary"></i>
+                <span>Admin Panel</span>
+              </a>
+            {% endif %}
+            <form method="post" action="{% url 'logout' %}" class="m-0 w-100">
+              {% csrf_token %}
+              <button type="submit" class="bs-sidebar-link border-0 w-100 text-start bg-transparent" style="cursor: pointer;">
+                <i class="bi bi-box-arrow-right text-danger"></i>
+                <span>Logout</span>
+              </button>
+            </form>
+          {% else %}
+            <a href="{% url 'login' %}">
+              <i class="bi bi-box-arrow-in-right text-warning"></i>
+              <span>Login</span>
+            </a>
+            <a href="{% url 'register' %}">
+              <i class="bi bi-person-plus text-warning"></i>
+              <span>Register</span>
+            </a>
+          {% endif %}
           <a href="{% url 'cart' %}">
             <i class="bi bi-cart3"></i>
             <span>Shopping Cart</span>
@@ -112,7 +192,12 @@
 
       <div class="bs-sidebar-footer">
         <a href="{% url 'books' %}" aria-label="Search"><i class="bi bi-search" aria-hidden="true"></i></a>
-        <a href="#" aria-label="Account"><i class="bi bi-person" aria-hidden="true"></i></a>
+        {% if request.user.is_authenticated %}
+          <a href="{% url 'account' %}" aria-label="Account"><i class="bi bi-person" aria-hidden="true"></i></a>
+        {% else %}
+          <a href="{% url 'login' %}" aria-label="Login"><i class="bi bi-person" aria-hidden="true"></i></a>
+        {% endif %}
+        <a href="{% url 'wishlist' %}" aria-label="Wishlist"><i class="bi bi-heart" aria-hidden="true"></i></a>
         <a href="{% url 'cart' %}" aria-label="Cart"><i class="bi bi-cart3" aria-hidden="true"></i><span class="badge-cart">{{ cart_count }}</span></a>
       </div>
     </div>

@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.test import TestCase, Client
 from django.urls import reverse
 from PIL import Image
-from store.models import Category, Book, Subscriber, Order, OrderItem
+from store.models import Category, Book, Subscriber, Order, OrderItem, UserProfile, Wishlist
 
 
 def make_valid_test_jpeg(width=300, height=400):
@@ -945,10 +945,20 @@ class CartTests(TestCase):
         self.assertContains(cart_res, self.book1.title)
         self.assertContains(cart_res, self.book2.title)
 
+        user = User.objects.create_user(username="cart_checkout_user", password="password123")
+        self.client.force_login(user)
+
         checkout_res = self.client.get(reverse("checkout"))
         self.assertEqual(checkout_res.status_code, 200)
         self.assertContains(checkout_res, self.book1.title)
         self.assertContains(checkout_res, self.book2.title)
+
+    def test_anonymous_checkout_redirects_to_login(self):
+        self.client.logout()
+        res = self.client.get(reverse("checkout"))
+        self.assertEqual(res.status_code, 302)
+        self.assertIn(reverse("login"), res.url)
+        self.assertIn("next=/checkout/", res.url)
 
     def test_navbar_badge_equals_total_quantity(self):
         # The navbar badge equals the total quantity.
@@ -1053,8 +1063,321 @@ class CartTests(TestCase):
         self.assertEqual(res.status_code, 405)
 
     def test_empty_cart_redirects_from_checkout_to_cart(self):
+        user = User.objects.create_user(username="checkout_user", password="password123")
+        self.client.login(username="checkout_user", password="password123")
         res = self.client.get(reverse("checkout"))
         self.assertRedirects(res, reverse("cart"))
+
+
+class Team3Tests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name="Fiction", icon="bi-book")
+        self.book1 = Book.objects.create(
+            title="Python Mastery",
+            author="Guido van Rossum",
+            category=self.category,
+            price=Decimal("450.00"),
+            old_price=Decimal("600.00"),
+            stock=10,
+            is_active=True,
+        )
+        self.book2 = Book.objects.create(
+            title="Django in Action",
+            author="Adrian Holovaty",
+            category=self.category,
+            price=Decimal("550.00"),
+            old_price=Decimal("700.00"),
+            stock=5,
+            is_active=True,
+        )
+        self.user = User.objects.create_user(
+            username="testuser",
+            email="testuser@example.com",
+            password="Password123!",
+            first_name="Test",
+            last_name="User"
+        )
+        self.other_user = User.objects.create_user(
+            username="otheruser",
+            email="otheruser@example.com",
+            password="Password123!",
+            first_name="Other",
+            last_name="User"
+        )
+
+    def test_register_login_logout_and_wrong_password(self):
+        # 1. Register new user
+        reg_data = {
+            "username": "newuser",
+            "first_name": "New",
+            "last_name": "Person",
+            "email": "newperson@example.com",
+            "password1": "ComplexPass123!",
+            "password2": "ComplexPass123!",
+        }
+        res_reg = self.client.post(reverse("register"), reg_data, follow=True)
+        self.assertEqual(res_reg.status_code, 200)
+        new_u = User.objects.filter(username="newuser").first()
+        self.assertIsNotNone(new_u)
+        self.assertEqual(new_u.email, "newperson@example.com")
+        self.assertEqual(new_u.first_name, "New")
+        self.assertEqual(int(self.client.session.get("_auth_user_id")), new_u.pk)
+        self.assertTrue(hasattr(new_u, "profile"))
+
+        # 2. Logout (POST)
+        res_logout = self.client.post(reverse("logout"), follow=True)
+        self.assertEqual(res_logout.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        # GET on logout returns 405
+        res_logout_get = self.client.get(reverse("logout"))
+        self.assertEqual(res_logout_get.status_code, 405)
+
+        # 3. Wrong password
+        res_wrong = self.client.post(reverse("login"), {
+            "username": "newuser",
+            "password": "WrongPassword123!"
+        })
+        self.assertEqual(res_wrong.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        # 4. Correct login
+        res_login = self.client.post(reverse("login"), {
+            "username": "newuser",
+            "password": "ComplexPass123!"
+        }, follow=True)
+        self.assertEqual(res_login.status_code, 200)
+        self.assertEqual(int(self.client.session.get("_auth_user_id")), new_u.pk)
+
+    def test_cart_survives_login(self):
+        self.client.logout()
+        self.client.post(reverse("cart_add", args=[self.book1.id]), {"qty": 2})
+        session_cart = self.client.session.get("cart", {})
+        self.assertEqual(session_cart.get(str(self.book1.id)), 2)
+
+        self.client.post(reverse("login"), {
+            "username": "testuser",
+            "password": "Password123!"
+        })
+
+        cart_after_login = self.client.session.get("cart", {})
+        self.assertEqual(cart_after_login.get(str(self.book1.id)), 2)
+
+        res_cart = self.client.get(reverse("cart"))
+        self.assertEqual(res_cart.context["cart_total_items"], 2)
+
+    def test_checkout_requires_login(self):
+        self.client.logout()
+        res = self.client.get(reverse("checkout"))
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/login/", res.url)
+        self.assertIn("next=/checkout/", res.url)
+
+    def test_checkout_validation_errors(self):
+        self.client.login(username="testuser", password="Password123!")
+        self.client.post(reverse("cart_add", args=[self.book1.id]), {"qty": 1})
+
+        res = self.client.post(reverse("checkout"), {
+            "name": "Test User",
+            "email": "testuser@example.com",
+            "phone": "12345",
+            "address_line1": "123 Main Street",
+            "city": "Bengaluru",
+            "state": "Karnataka",
+            "pin": "999",
+            "payment_method": "Cash on Delivery",
+        })
+        self.assertEqual(res.status_code, 200)
+        form = res.context["form"]
+        self.assertTrue(form.errors)
+        self.assertIn("phone", form.errors)
+        self.assertIn("pin", form.errors)
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 0)
+
+    def test_order_creation_reduces_stock_and_clears_cart(self):
+        self.client.login(username="testuser", password="Password123!")
+        initial_stock = self.book1.stock
+        order_qty = 3
+
+        self.client.post(reverse("cart_add", args=[self.book1.id]), {"qty": order_qty})
+
+        checkout_data = {
+            "name": "Test User",
+            "email": "testuser@example.com",
+            "phone": "9876543210",
+            "address_line1": "456 Park Avenue",
+            "address_line2": "Suite 101",
+            "city": "Chennai",
+            "state": "Tamil Nadu",
+            "pin": "600001",
+            "payment_method": "UPI",
+        }
+        res = self.client.post(reverse("checkout"), checkout_data, follow=True)
+        self.assertEqual(res.status_code, 200)
+
+        order = Order.objects.filter(user=self.user).first()
+        self.assertIsNotNone(order)
+        self.assertTrue(order.order_number.startswith("BS-"))
+        self.assertEqual(order.status, "Pending")
+        self.assertEqual(order.payment_method, "UPI")
+        self.assertEqual(order.items.count(), 1)
+
+        self.book1.refresh_from_db()
+        self.assertEqual(self.book1.stock, initial_stock - order_qty)
+
+        session_cart = self.client.session.get("cart", {})
+        self.assertEqual(session_cart, {})
+
+    def test_not_enough_stock_blocks_order(self):
+        self.client.login(username="testuser", password="Password123!")
+        self.client.post(reverse("cart_add", args=[self.book2.id]), {"qty": 4})
+
+        self.book2.stock = 2
+        self.book2.save(update_fields=["stock"])
+
+        res = self.client.post(reverse("checkout"), {
+            "name": "Test User",
+            "email": "testuser@example.com",
+            "phone": "9876543210",
+            "address_line1": "456 Park Avenue",
+            "city": "Chennai",
+            "state": "Tamil Nadu",
+            "pin": "600001",
+            "payment_method": "Cash on Delivery",
+        }, follow=True)
+
+        self.assertEqual(Order.objects.filter(user=self.user).count(), 0)
+        msgs = [m.message for m in get_messages(res.wsgi_request)]
+        self.assertTrue(any(f"Only 2 copies of {self.book2.title} left" in m for m in msgs))
+        session_cart = self.client.session.get("cart", {})
+        self.assertEqual(session_cart.get(str(self.book2.id)), 4)
+        self.book2.refresh_from_db()
+        self.assertEqual(self.book2.stock, 2)
+
+    def test_order_number_unique(self):
+        order1 = Order.objects.create(
+            name="Alice",
+            email="alice@example.com",
+            phone="9876543210",
+            address_line1="Line 1",
+            city="City",
+            state="State",
+            pin="123456",
+            total_amount=Decimal("500.00")
+        )
+        order2 = Order.objects.create(
+            name="Bob",
+            email="bob@example.com",
+            phone="9876543210",
+            address_line1="Line 2",
+            city="City",
+            state="State",
+            pin="123456",
+            total_amount=Decimal("600.00")
+        )
+        self.assertNotEqual(order1.order_number, order2.order_number)
+        self.assertTrue(order1.order_number.startswith("BS-"))
+        self.assertTrue(order2.order_number.startswith("BS-"))
+
+    def test_user_cannot_open_another_users_order(self):
+        order = Order.objects.create(
+            user=self.user,
+            name="Test User",
+            email="testuser@example.com",
+            phone="9876543210",
+            address_line1="Line 1",
+            city="City",
+            state="State",
+            pin="123456",
+            total_amount=Decimal("450.00")
+        )
+
+        self.client.login(username="otheruser", password="Password123!")
+
+        res_detail = self.client.get(reverse("order_detail", args=[order.pk]))
+        self.assertEqual(res_detail.status_code, 404)
+
+        res_success = self.client.get(reverse("order_success", args=[order.pk]))
+        self.assertEqual(res_success.status_code, 404)
+
+        res_cancel = self.client.post(reverse("order_cancel", args=[order.pk]))
+        self.assertEqual(res_cancel.status_code, 404)
+
+    def test_cancel_order_restores_stock(self):
+        self.client.login(username="testuser", password="Password123!")
+        initial_stock = self.book1.stock
+        order_qty = 2
+
+        order = Order.objects.create(
+            user=self.user,
+            name="Test User",
+            email="testuser@example.com",
+            phone="9876543210",
+            address_line1="Line 1",
+            city="City",
+            state="State",
+            pin="123456",
+            total_amount=Decimal("900.00"),
+            status="Pending",
+        )
+        OrderItem.objects.create(
+            order=order,
+            book=self.book1,
+            quantity=order_qty,
+            price=self.book1.price,
+        )
+        self.book1.stock -= order_qty
+        self.book1.save(update_fields=["stock"])
+
+        res = self.client.post(reverse("order_cancel", args=[order.pk]), follow=True)
+        self.assertEqual(res.status_code, 200)
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, "Cancelled")
+
+        self.book1.refresh_from_db()
+        self.assertEqual(self.book1.stock, initial_stock)
+
+    def test_wishlist_toggle_add_and_remove(self):
+        self.client.login(username="testuser", password="Password123!")
+        toggle_url = reverse("wishlist_toggle", args=[self.book1.id])
+
+        res_add = self.client.post(toggle_url, follow=True)
+        self.assertEqual(res_add.status_code, 200)
+        self.assertTrue(Wishlist.objects.filter(user=self.user, book=self.book1).exists())
+
+        res_remove = self.client.post(
+            toggle_url,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+        )
+        self.assertEqual(res_remove.status_code, 200)
+        json_data = res_remove.json()
+        self.assertFalse(json_data["added"])
+        self.assertEqual(json_data["count"], 0)
+        self.assertFalse(Wishlist.objects.filter(user=self.user, book=self.book1).exists())
+
+        res_page = self.client.get(reverse("wishlist"))
+        self.assertEqual(res_page.status_code, 200)
+        self.assertContains(res_page, "Your wishlist is empty")
+
+    def test_guest_wishlist_redirects_to_login(self):
+        self.client.logout()
+        toggle_url = reverse("wishlist_toggle", args=[self.book1.id])
+
+        res = self.client.post(toggle_url)
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/login/", res.url)
+
+        res_ajax = self.client.post(
+            toggle_url,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+        )
+        self.assertEqual(res_ajax.status_code, 401)
+        data = res_ajax.json()
+        self.assertEqual(data["error"], "login_required")
+        self.assertIn("/login/", data["login_url"])
+
 
 
 

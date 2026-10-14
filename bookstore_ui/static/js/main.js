@@ -139,10 +139,70 @@ if (bulkDeleteBtn && bulkDeleteForm) {
 
 
 
-document.querySelectorAll('[data-wish]').forEach(b => b.onclick = () => {
-  const on = b.classList.toggle('text-danger');
-  b.querySelector('i').className = on ? 'bi bi-heart-fill' : 'bi bi-heart';
+// Wishlist AJAX toggle handler
+document.addEventListener('submit', function(e) {
+  const form = e.target;
+  if (!form || !form.matches('[data-wish-form]')) return;
+
+  e.preventDefault();
+  const formData = new FormData(form);
+  const actionUrl = form.action;
+
+  fetch(actionUrl, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'Accept': 'application/json'
+    }
+  })
+  .then(res => {
+    if (res.status === 401) {
+      return res.json().then(data => {
+        window.location.href = data.login_url || '/login/';
+      });
+    }
+    if (!res.ok) throw new Error('Wishlist request failed');
+    return res.json();
+  })
+  .then(data => {
+    if (!data) return;
+
+    // Update icons inside this form
+    const icon = form.querySelector('i');
+    if (icon) {
+      if (data.added) {
+        icon.className = 'bi bi-heart-fill text-danger fs-5';
+      } else {
+        icon.className = 'bi bi-heart text-muted fs-5';
+      }
+    }
+
+    // Update text if present
+    const wishText = form.querySelector('.wish-text');
+    if (wishText) {
+      wishText.textContent = data.added ? 'In your Wishlist (Click to remove)' : 'Add to Wishlist';
+    }
+
+    // Update button title/active class
+    const btn = form.querySelector('button');
+    if (btn) {
+      btn.title = data.added ? 'Remove from Wishlist' : 'Add to Wishlist';
+    }
+
+    // Update any badges for wishlist
+    document.querySelectorAll('.badge-wishlist').forEach(badge => {
+      badge.textContent = data.count;
+      badge.style.display = data.count > 0 ? '' : 'none';
+    });
+  })
+  .catch(err => {
+    // Fallback to native submission if fetch fails
+    form._isConfirmed = true;
+    form.submit();
+  });
 });
+
 
 // AI summary (TEAM 4: replace the demo block with fetch(btn.dataset.url) -> Gemini view)
 const aiBtn = document.getElementById('aiBtn');

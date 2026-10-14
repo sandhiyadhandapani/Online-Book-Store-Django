@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}My Orders - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; <a href="{% url 'account' %}">My Account</a> &rsaquo; Orders
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="serif fs-4 mb-0">My Orders</h2>
+    <span class="text-muted small">{{ paginator.count }} order{{ paginator.count|pluralize }}</span>
+  </div>
+
+  {% if orders %}
+    <div class="panel shadow-sm p-0 overflow-hidden mb-4">
+      <div class="table-responsive">
+        <table class="tbl mb-0" style="min-width: 600px;">
+          <thead class="bg-light">
+            <tr>
+              <th class="ps-3 py-3">Order Number</th>
+              <th class="py-3">Date</th>
+              <th class="py-3">Items</th>
+              <th class="py-3">Total Amount</th>
+              <th class="py-3">Status</th>
+              <th class="text-end pe-3 py-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for order in orders %}
+              <tr>
+                <td class="ps-3 py-3">
+                  <a href="{% url 'order_detail' order.id %}" class="fw-bold text-navy text-decoration-none">
+                    {{ order.order_number }}
+                  </a>
+                </td>
+                <td class="py-3 text-muted small">{{ order.created_at|date:"M d, Y" }}</td>
+                <td class="py-3 small">
+                  {{ order.items.count }} item{{ order.items.count|pluralize }}
+                </td>
+                <td class="py-3"><b>₹{{ order.total_amount }}</b></td>
+                <td class="py-3">
+                  <span class="badge {% if order.status == 'Delivered' %}bg-success{% elif order.status == 'Shipped' %}bg-primary{% elif order.status == 'Cancelled' %}bg-danger{% else %}bg-warning text-navy{% endif %}">
+                    {{ order.status }}
+                  </span>
+                </td>
+                <td class="text-end pe-3 py-3">
+                  <a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-outline-secondary py-1 px-3" style="font-size: 13px;">
+                    View Order
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if orders.has_other_pages %}
+      <div class="pager">
+        {% if orders.has_previous %}
+          <a href="?page={{ orders.previous_page_number }}" aria-label="Previous page">&lsaquo;</a>
+        {% endif %}
+
+        {% for p in paginator.page_range %}
+          {% if p == orders.number %}
+            <a href="?page={{ p }}" class="on">{{ p }}</a>
+          {% else %}
+            <a href="?page={{ p }}">{{ p }}</a>
+          {% endif %}
+        {% endfor %}
+
+        {% if orders.has_next %}
+          <a href="?page={{ orders.next_page_number }}" aria-label="Next page">&rsaquo;</a>
+        {% endif %}
+      </div>
+    {% endif %}
+
+  {% else %}
+    <div class="panel text-center py-5 shadow-sm">
+      <div class="mb-3" style="font-size: 3.5rem; color: var(--muted); opacity: 0.7;">
+        <i class="bi bi-bag-x"></i>
+      </div>
+      <h3 class="serif mb-2" style="font-weight: 700;">No orders yet</h3>
+      <p class="text-muted mb-4">You haven't placed any orders yet. Discover our collection of books today!</p>
+      <a href="{% url 'books' %}" class="btn-or d-inline-block px-4 py-2 text-decoration-none">
+        <i class="bi bi-book me-1"></i> Browse Books
+      </a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

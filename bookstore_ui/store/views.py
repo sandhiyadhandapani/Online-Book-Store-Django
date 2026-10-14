@@ -1,14 +1,19 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.validators import EmailValidator
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
+from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, Q, ProtectedError
-from django.http import HttpResponseNotAllowed, HttpResponseForbidden
-from .models import Book, Category, Order, Subscriber
-from .forms import BookForm
+from django.http import HttpResponseNotAllowed, HttpResponseForbidden, JsonResponse, Http404
+from django.urls import reverse
+from .models import Book, Category, Order, OrderItem, Subscriber, UserProfile, Wishlist
+from .forms import BookForm, RegisterForm, LoginForm, CheckoutForm, ProfileForm
 from .cart import Cart
 
 User = get_user_model()
@@ -147,6 +152,14 @@ def _redirect_back(request, fallback="cart"):
 def cart_view(request):
     cart = Cart(request)
     items = list(cart)
+    stock_error_shown = request.session.pop("stock_error_shown", False)
+    if not stock_error_shown:
+        for item in items:
+            if item.get("exceeds_stock"):
+                messages.warning(
+                    request,
+                    f"Only {item['book'].stock} copies of {item['title']} left. Please update your cart."
+                )
     return render(request, "cart.html", _ctx(
         nav="cart",
         items=items,
@@ -158,15 +171,163 @@ def cart_view(request):
     ))
 
 
+def send_order_confirmation_email(order):
+    subject = f"Order Confirmation - {order.order_number}"
+    items_list = "\n".join([
+        f"- {item.quantity}x {item.book.title} @ Rs. {item.price} = Rs. {item.line_total}"
+        for item in order.items.select_related("book")
+    ])
+    addr_line2 = f"{order.address_line2}\n" if order.address_line2 else ""
+    message = (
+        f"Dear {order.name},\n\n"
+        f"Thank you for your order at BookStore! Your order has been placed successfully.\n\n"
+        f"Order Number: {order.order_number}\n"
+        f"Order Date: {order.created_at.strftime('%Y-%m-%d %H:%M')}\n"
+        f"Status: {order.status}\n"
+        f"Payment Method: {order.payment_method}\n\n"
+        f"Delivery Address:\n"
+        f"{order.name}\n"
+        f"{order.address_line1}\n"
+        f"{addr_line2}"
+        f"{order.city}, {order.state} - {order.pin}\n"
+        f"Phone: {order.phone}\n\n"
+        f"Items Ordered:\n{items_list}\n\n"
+        f"Subtotal: Rs. {order.subtotal}\n"
+        f"Shipping: Rs. {order.shipping_fee}\n"
+        f"Total Amount: Rs. {order.total_amount}\n\n"
+        f"Happy reading!\n"
+        f"The BookStore Team"
+    )
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "orders@bookstore.com")
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=from_email,
+        recipient_list=[order.email],
+        fail_silently=True,
+    )
+
+
+def _get_checkout_initial(user):
+    initial = {}
+    if user.is_authenticated:
+        initial["name"] = f"{user.first_name} {user.last_name}".strip() or user.username
+        initial["email"] = user.email
+
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        if profile.phone:
+            initial["phone"] = profile.phone
+        if profile.address_line1:
+            initial["address_line1"] = profile.address_line1
+            initial["address_line2"] = profile.address_line2
+            initial["city"] = profile.city
+            initial["state"] = profile.state
+            initial["pin"] = profile.pin
+
+        last_order = Order.objects.filter(user=user).order_by("-created_at").first()
+        if last_order:
+            if not initial.get("phone"):
+                initial["phone"] = last_order.phone
+            if not initial.get("address_line1"):
+                initial["address_line1"] = last_order.address_line1
+                initial["address_line2"] = last_order.address_line2
+                initial["city"] = last_order.city
+                initial["state"] = last_order.state
+                initial["pin"] = last_order.pin
+    return initial
+
+
+@login_required(login_url="login")
 def checkout(request):
     cart = Cart(request)
     if len(cart) == 0:
         messages.info(request, "Your cart is empty.")
         return redirect("cart")
 
+    if request.method == "POST":
+        form = CheckoutForm(request.POST)
+        if form.is_valid():
+            book_ids = [item["id"] for item in cart]
+            insufficient_stock_messages = []
+
+            with transaction.atomic():
+                locked_books = {
+                    b.id: b
+                    for b in Book.objects.select_for_update().filter(id__in=book_ids)
+                }
+
+                for item in cart:
+                    book = locked_books.get(item["id"])
+                    if not book or not book.is_active or book.stock < item["quantity"]:
+                        avail = book.stock if (book and book.is_active) else 0
+                        insufficient_stock_messages.append(
+                            f"Only {avail} copies of {item['title']} left. Please update your cart."
+                        )
+
+                if insufficient_stock_messages:
+                    for msg in insufficient_stock_messages:
+                        messages.error(request, msg)
+                    request.session["stock_error_shown"] = True
+                    return redirect("cart")
+
+
+                order = Order.objects.create(
+                    user=request.user,
+                    name=form.cleaned_data["name"],
+                    email=form.cleaned_data["email"],
+                    phone=form.cleaned_data["phone"],
+                    address_line1=form.cleaned_data["address_line1"],
+                    address_line2=form.cleaned_data["address_line2"],
+                    city=form.cleaned_data["city"],
+                    state=form.cleaned_data["state"],
+                    pin=form.cleaned_data["pin"],
+                    payment_method=form.cleaned_data["payment_method"],
+                    shipping_fee=cart.shipping,
+                    subtotal=cart.subtotal,
+                    total_amount=cart.total,
+                    status="Pending",
+                )
+
+                for item in cart:
+                    book = locked_books[item["id"]]
+                    OrderItem.objects.create(
+                        order=order,
+                        book=book,
+                        quantity=item["quantity"],
+                        price=book.price,
+                    )
+                    book.stock -= item["quantity"]
+                    book.save(update_fields=["stock"])
+
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                updated_profile = False
+                if not profile.phone and order.phone:
+                    profile.phone = order.phone
+                    updated_profile = True
+                if not profile.address_line1 and order.address_line1:
+                    profile.address_line1 = order.address_line1
+                    profile.address_line2 = order.address_line2
+                    profile.city = order.city
+                    profile.state = order.state
+                    profile.pin = order.pin
+                    updated_profile = True
+                if updated_profile:
+                    profile.save()
+
+                cart.clear()
+                send_order_confirmation_email(order)
+                messages.success(request, f"Order #{order.order_number} placed successfully!")
+                return redirect("order_success", pk=order.pk)
+        else:
+            messages.error(request, "Please correct the errors in the checkout form.")
+    else:
+        initial = _get_checkout_initial(request.user)
+        form = CheckoutForm(initial=initial)
+
     items = list(cart)
     return render(request, "checkout.html", _ctx(
         nav="checkout",
+        form=form,
         items=items,
         cart_total_items=len(cart),
         subtotal=cart.subtotal,
@@ -174,6 +335,20 @@ def checkout(request):
         shipping=cart.shipping,
         total=cart.total,
     ))
+
+
+@login_required(login_url="login")
+def order_success(request, pk):
+    order = get_object_or_404(
+        Order.objects.prefetch_related("items__book"),
+        pk=pk,
+        user=request.user
+    )
+    return render(request, "order_success.html", _ctx(
+        nav="orders",
+        order=order,
+    ))
+
 
 
 def cart_add(request, pk):
@@ -465,4 +640,246 @@ def book_bulk_delete(request):
         )
 
     return redirect("dashboard_books")
+
+
+# ==============================================================================
+# TEAM 3: AUTH VIEWS
+# ==============================================================================
+
+def register_view(request):
+    if request.user.is_authenticated:
+        return redirect("home")
+
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+
+    if request.method == "POST":
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            cart_data = request.session.get("cart")
+            user = form.save()
+            login(request, user)
+            if cart_data:
+                request.session["cart"] = cart_data
+                request.session.modified = True
+
+            messages.success(request, f"Welcome to BookStore, {user.first_name}!")
+            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+                return redirect(next_url)
+            return redirect("home")
+        else:
+            messages.error(request, "Please correct the errors in the registration form.")
+    else:
+        form = RegisterForm()
+
+    return render(request, "register.html", _ctx(
+        nav="register",
+        form=form,
+        next=next_url,
+    ))
+
+
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect("home")
+
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+
+    if request.method == "POST":
+        form = LoginForm(request, data=request.POST)
+        if form.is_valid():
+            cart_data = request.session.get("cart")
+            user = form.get_user()
+            login(request, user)
+            if cart_data:
+                request.session["cart"] = cart_data
+                request.session.modified = True
+
+            messages.success(request, f"Welcome back, {user.first_name or user.username}!")
+            if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+                return redirect(next_url)
+            return redirect("home")
+        else:
+            messages.error(request, "Invalid username or password.")
+    else:
+        form = LoginForm(request)
+
+    return render(request, "login.html", _ctx(
+        nav="login",
+        form=form,
+        next=next_url,
+    ))
+
+
+def logout_view(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    logout(request)
+    messages.success(request, "You have been logged out.")
+    return redirect("home")
+
+
+# ==============================================================================
+# TEAM 3: MY ACCOUNT & ORDERS
+# ==============================================================================
+
+@login_required(login_url="login")
+def account_view(request):
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+    if request.method == "POST":
+        form = ProfileForm(request.POST, user=request.user)
+        if form.is_valid():
+            request.user.first_name = form.cleaned_data["first_name"].strip()
+            request.user.last_name = form.cleaned_data["last_name"].strip()
+            request.user.email = form.cleaned_data["email"].strip().lower()
+            request.user.save(update_fields=["first_name", "last_name", "email"])
+
+            profile.phone = form.cleaned_data["phone"].strip()
+            profile.address_line1 = form.cleaned_data["address_line1"].strip()
+            profile.address_line2 = form.cleaned_data["address_line2"].strip()
+            profile.city = form.cleaned_data["city"].strip()
+            profile.state = form.cleaned_data["state"].strip()
+            profile.pin = form.cleaned_data["pin"].strip()
+            profile.save()
+
+            messages.success(request, "Your profile has been updated successfully.")
+            return redirect("account")
+        else:
+            messages.error(request, "Please correct the errors in the profile form.")
+    else:
+        initial = {
+            "first_name": request.user.first_name,
+            "last_name": request.user.last_name,
+            "email": request.user.email,
+            "phone": profile.phone,
+            "address_line1": profile.address_line1,
+            "address_line2": profile.address_line2,
+            "city": profile.city,
+            "state": profile.state,
+            "pin": profile.pin,
+        }
+        form = ProfileForm(initial=initial, user=request.user)
+
+    recent_orders = Order.objects.filter(user=request.user).order_by("-created_at")[:4]
+    return render(request, "account.html", _ctx(
+        nav="account",
+        form=form,
+        profile=profile,
+        recent_orders=recent_orders,
+    ))
+
+
+@login_required(login_url="login")
+def order_list(request):
+    orders_qs = Order.objects.filter(user=request.user).prefetch_related("items").order_by("-created_at")
+    paginator = Paginator(orders_qs, 10)
+    page_number = request.GET.get("page", 1)
+    try:
+        orders = paginator.page(page_number)
+    except PageNotAnInteger:
+        orders = paginator.page(1)
+    except EmptyPage:
+        orders = paginator.page(paginator.num_pages)
+
+    return render(request, "order_list.html", _ctx(
+        nav="orders",
+        orders=orders,
+        page_obj=orders,
+        paginator=paginator,
+    ))
+
+
+@login_required(login_url="login")
+def order_detail(request, pk):
+    order = get_object_or_404(
+        Order.objects.prefetch_related("items__book"),
+        pk=pk,
+        user=request.user
+    )
+    return render(request, "order_detail.html", _ctx(
+        nav="orders",
+        order=order,
+    ))
+
+
+@login_required(login_url="login")
+def order_cancel(request, pk):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    order = get_object_or_404(Order, pk=pk, user=request.user)
+    if order.status != "Pending":
+        messages.error(
+            request,
+            f"Order #{order.order_number or order.id} cannot be cancelled because it is already {order.status}."
+        )
+        return redirect("order_detail", pk=order.pk)
+
+    with transaction.atomic():
+        for item in order.items.select_related("book"):
+            book = Book.objects.select_for_update().get(pk=item.book_id)
+            book.stock += item.quantity
+            book.save(update_fields=["stock"])
+
+        order.status = "Cancelled"
+        order.save(update_fields=["status"])
+
+    messages.success(request, f"Order #{order.order_number or order.id} has been cancelled and stock has been restored.")
+    return redirect("order_detail", pk=order.pk)
+
+
+# ==============================================================================
+# TEAM 3: WISHLIST VIEWS
+# ==============================================================================
+
+def wishlist_toggle(request, book_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    is_ajax = (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("accept", "")
+    )
+
+    if not request.user.is_authenticated:
+        login_url = f"{reverse('login')}?next={request.POST.get('next') or request.META.get('HTTP_REFERER') or reverse('books')}"
+        if is_ajax:
+            return JsonResponse({"error": "login_required", "login_url": login_url}, status=401)
+        return redirect(login_url)
+
+    book = get_object_or_404(Book, pk=book_id, is_active=True)
+    wishlist_item = Wishlist.objects.filter(user=request.user, book=book).first()
+
+    if wishlist_item:
+        wishlist_item.delete()
+        added = False
+        messages.success(request, f'"{book.title}" removed from your wishlist.')
+    else:
+        Wishlist.objects.create(user=request.user, book=book)
+        added = True
+        messages.success(request, f'"{book.title}" added to your wishlist.')
+
+    count = Wishlist.objects.filter(user=request.user).count()
+
+    if is_ajax:
+        return JsonResponse({
+            "added": added,
+            "book_id": book.id,
+            "count": count,
+            "message": f'"{book.title}" {"added to" if added else "removed from"} your wishlist.'
+        })
+
+    return _redirect_back(request, fallback="wishlist")
+
+
+@login_required(login_url="login")
+def wishlist_view(request):
+    items = Wishlist.objects.filter(user=request.user).select_related("book__category").order_by("-created_at")
+    return render(request, "wishlist.html", _ctx(
+        nav="wishlist",
+        items=items,
+        wishlist_count=items.count(),
+    ))
+
 

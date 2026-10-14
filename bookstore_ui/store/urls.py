@@ -11,6 +11,24 @@ urlpatterns = [
     path('cart/update/<int:pk>/', views.cart_update, name='cart_update'),
     path('cart/add/<int:pk>/', views.cart_add, name='cart_add'),
     path('newsletter/', views.newsletter, name='newsletter'),
+
+    # Auth
+    path('register/', views.register_view, name='register'),
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+
+    # Orders & Checkout
+    path('orders/<int:pk>/success/', views.order_success, name='order_success'),
+    path('orders/', views.order_list, name='orders'),
+    path('orders/<int:pk>/', views.order_detail, name='order_detail'),
+    path('orders/<int:pk>/cancel/', views.order_cancel, name='order_cancel'),
+
+    # Account & Wishlist
+    path('account/', views.account_view, name='account'),
+    path('wishlist/', views.wishlist_view, name='wishlist'),
+    path('wishlist/toggle/<int:book_id>/', views.wishlist_toggle, name='wishlist_toggle'),
+
+    # Admin Dashboard
     path('dashboard/', views.dashboard, name='dashboard'),
     path('dashboard/books/', views.dashboard_books, name='dashboard_books'),
     path('dashboard/books/add/', views.book_add, name='book_add'),

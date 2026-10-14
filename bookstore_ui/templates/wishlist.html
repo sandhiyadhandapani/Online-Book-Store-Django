@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}My Wishlist - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; Wishlist
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="serif fs-4 mb-0">My Wishlist <small class="text-muted fs-6">({{ wishlist_count }} item{{ wishlist_count|pluralize }})</small></h2>
+    {% if items %}
+      <a href="{% url 'books' %}" class="small text-muted text-decoration-none">
+        <i class="bi bi-plus-circle me-1"></i> Add More Books
+      </a>
+    {% endif %}
+  </div>
+
+  {% if items %}
+    <div class="row g-4">
+      <div class="col-lg-8">
+        <div class="panel shadow-sm">
+          <h6 class="border-bottom pb-2 mb-3">Saved Books</h6>
+          {% for item in items %}
+            <div class="bcard row-card border-0 p-0 mb-3 pb-3 border-bottom">
+              {% with b=item.book %}
+                {% include "partials/cover.html" %}
+              {% endwith %}
+              <div class="row-details">
+                <h5><a href="{% url 'book_detail' item.book.id %}" class="text-decoration-none text-navy">{{ item.book.title }}</a></h5>
+                <div class="au mb-1">{{ item.book.author }}</div>
+                <div class="price mb-2">
+                  <b class="fs-6">₹{{ item.book.price }}</b>
+                  {% if item.book.old_price %}<s class="ms-1 small">₹{{ item.book.old_price }}</s>{% endif %}
+                </div>
+                <div>
+                  {% if item.book.stock > 0 %}
+                    <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 11px;">In Stock ({{ item.book.stock }})</span>
+                  {% else %}
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 11px;">Out of Stock</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="row-actions d-flex flex-column align-items-end gap-2">
+                <form method="post" action="{% url 'wishlist_toggle' item.book.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button type="submit" class="remove-btn" title="Remove from wishlist" aria-label="Remove {{ item.book.title }} from wishlist">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+                {% if item.book.stock > 0 %}
+                  <form method="post" action="{% url 'cart_add' item.book.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn-or btn-sm px-3 py-1" style="font-size: 12.5px;">
+                      <i class="bi bi-cart-plus me-1"></i> Move to Cart
+                    </button>
+                  </form>
+                {% else %}
+                  <button type="button" class="btn btn-sm btn-secondary py-1 px-3" disabled style="font-size: 12.5px; opacity: 0.6;">
+                    Out of Stock
+                  </button>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+
+          <div class="d-flex justify-content-between align-items-center pt-2">
+            <a href="{% url 'books' %}" class="text-decoration-none text-muted small">
+              <i class="bi bi-arrow-left me-1"></i> Continue Shopping
+            </a>
+            <a href="{% url 'cart' %}" class="text-decoration-none text-warning fw-semibold small">
+              Go to Shopping Cart <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="panel shadow-sm">
+          <h6>Wishlist Perks</h6>
+          <p class="small text-muted mb-3">Items in your wishlist stay saved until you're ready to read. You can move them directly into your shopping cart whenever you want.</p>
+          <div class="d-flex align-items-center gap-2 mb-2 small text-muted">
+            <i class="bi bi-bell text-warning"></i>
+            <span>Track your favorite titles</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 mb-2 small text-muted">
+            <i class="bi bi-box2-heart text-danger"></i>
+            <span>Easy one-click move to cart</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 small text-muted">
+            <i class="bi bi-truck text-primary"></i>
+            <span>Free delivery on orders over ₹499</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="panel text-center py-5 shadow-sm">
+      <div class="mb-3" style="font-size: 3.5rem; color: #e04848; opacity: 0.7;">
+        <i class="bi bi-heart"></i>
+      </div>
+      <h3 class="serif mb-2" style="font-weight: 700;">Your wishlist is empty</h3>
+      <p class="text-muted mb-4">Click the heart icon on any book to save it here for later.</p>
+      <a href="{% url 'books' %}" class="btn-or d-inline-block px-4 py-2 text-decoration-none">
+        <i class="bi bi-book me-1"></i> Browse Books
+      </a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

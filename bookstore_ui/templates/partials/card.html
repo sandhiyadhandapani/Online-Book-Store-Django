@@ -1,4 +1,11 @@
-<div class="bcard">
+<div class="bcard position-relative">
+  <form method="post" action="{% url 'wishlist_toggle' b.id %}" class="wish-form position-absolute top-0 end-0 m-2" data-wish-form style="z-index: 5;">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button type="submit" class="wish-btn border-0 bg-transparent p-1 cursor-pointer" title="{% if b.id in wishlist_book_ids %}Remove from Wishlist{% else %}Add to Wishlist{% endif %}" aria-label="Toggle Wishlist" style="cursor: pointer; line-height: 1;">
+      <i class="bi {% if b.id in wishlist_book_ids %}bi-heart-fill text-danger{% else %}bi-heart text-muted{% endif %} fs-5"></i>
+    </button>
+  </form>
   <a href="{% url 'book_detail' b.id %}">
     {% include "partials/cover.html" %}
   </a>

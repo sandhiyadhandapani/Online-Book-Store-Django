@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}My Account - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; My Account
+  </div>
+
+  <h2 class="serif fs-4 mb-4">My Account</h2>
+
+  <div class="row g-4">
+    <!-- Left Column: Profile Overview Card -->
+    <div class="col-lg-4">
+      <div class="panel shadow-sm text-center mb-4">
+        <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-navy text-white fw-bold fs-3 mb-3 shadow-sm" style="width: 72px; height: 72px; background: var(--navy);">
+          {{ request.user.first_name|default:request.user.username|make_list|first|upper }}
+        </div>
+        <h4 class="serif fs-5 mb-1">{{ request.user.first_name }} {{ request.user.last_name }}</h4>
+        <p class="text-muted small mb-2">@{{ request.user.username }}</p>
+        <span class="badge bg-light text-navy border px-2 py-1 mb-3">
+          Member since {{ request.user.date_joined|date:"M Y" }}
+        </span>
+
+        <div class="border-top pt-3 text-start">
+          <div class="d-flex align-items-center gap-2 mb-2 small text-muted">
+            <i class="bi bi-envelope text-warning"></i>
+            <span class="text-truncate">{{ request.user.email }}</span>
+          </div>
+          {% if profile.phone %}
+            <div class="d-flex align-items-center gap-2 mb-2 small text-muted">
+              <i class="bi bi-telephone text-warning"></i>
+              <span>{{ profile.phone }}</span>
+            </div>
+          {% endif %}
+          {% if profile.city and profile.state %}
+            <div class="d-flex align-items-center gap-2 small text-muted">
+              <i class="bi bi-geo-alt text-warning"></i>
+              <span>{{ profile.city }}, {{ profile.state }}</span>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Quick Nav Links -->
+      <div class="panel shadow-sm">
+        <h6 class="mb-3">Quick Navigation</h6>
+        <div class="list-group list-group-flush small">
+          <a href="{% url 'orders' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 py-2">
+            <span><i class="bi bi-bag-check me-2 text-success"></i>My Orders</span>
+            <i class="bi bi-chevron-right text-muted"></i>
+          </a>
+          <a href="{% url 'wishlist' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 py-2">
+            <span><i class="bi bi-heart me-2 text-danger"></i>Wishlist</span>
+            {% if wishlist_count %}<span class="badge bg-danger rounded-pill">{{ wishlist_count }}</span>{% else %}<i class="bi bi-chevron-right text-muted"></i>{% endif %}
+          </a>
+          <a href="{% url 'cart' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 py-2">
+            <span><i class="bi bi-cart3 me-2 text-warning"></i>Shopping Cart</span>
+            <span class="badge bg-secondary rounded-pill">{{ cart_count }}</span>
+          </a>
+          {% if request.user.is_staff %}
+            <a href="{% url 'dashboard' %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 py-2">
+              <span><i class="bi bi-speedometer2 me-2 text-warning"></i>Staff Dashboard</span>
+              <i class="bi bi-chevron-right text-muted"></i>
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Profile Edit Form -->
+    <div class="col-lg-8">
+      <div class="panel shadow-sm mb-4">
+        <h6 class="border-bottom pb-2 mb-3">Edit Profile &amp; Default Address</h6>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 small mb-3">
+            {% for error in form.non_field_errors %}
+              <div>{{ error }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'account' %}">
+          {% csrf_token %}
+
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label class="lbl" for="{{ form.first_name.id_for_label }}">First Name *</label>
+              {{ form.first_name }}
+              {% if form.first_name.errors %}
+                <div class="text-danger small mt-1">{{ form.first_name.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-sm-6">
+              <label class="lbl" for="{{ form.last_name.id_for_label }}">Last Name *</label>
+              {{ form.last_name }}
+              {% if form.last_name.errors %}
+                <div class="text-danger small mt-1">{{ form.last_name.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-sm-6">
+              <label class="lbl" for="{{ form.email.id_for_label }}">Email Address *</label>
+              {{ form.email }}
+              {% if form.email.errors %}
+                <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-sm-6">
+              <label class="lbl" for="{{ form.phone.id_for_label }}">Phone Number</label>
+              {{ form.phone }}
+              {% if form.phone.errors %}
+                <div class="text-danger small mt-1">{{ form.phone.errors.0 }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <h6 class="border-bottom pb-2 mb-3 pt-2">Default Delivery Address</h6>
+
+          <div class="row g-3 mb-4">
+            <div class="col-12">
+              <label class="lbl" for="{{ form.address_line1.id_for_label }}">Address Line 1</label>
+              {{ form.address_line1 }}
+              {% if form.address_line1.errors %}
+                <div class="text-danger small mt-1">{{ form.address_line1.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-12">
+              <label class="lbl" for="{{ form.address_line2.id_for_label }}">Address Line 2 (Optional)</label>
+              {{ form.address_line2 }}
+              {% if form.address_line2.errors %}
+                <div class="text-danger small mt-1">{{ form.address_line2.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="lbl" for="{{ form.city.id_for_label }}">City</label>
+              {{ form.city }}
+              {% if form.city.errors %}
+                <div class="text-danger small mt-1">{{ form.city.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="lbl" for="{{ form.state.id_for_label }}">State</label>
+              {{ form.state }}
+              {% if form.state.errors %}
+                <div class="text-danger small mt-1">{{ form.state.errors.0 }}</div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="lbl" for="{{ form.pin.id_for_label }}">PIN Code</label>
+              {{ form.pin }}
+              {% if form.pin.errors %}
+                <div class="text-danger small mt-1">{{ form.pin.errors.0 }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <button type="submit" class="btn-or px-4">Save Changes</button>
+        </form>
+      </div>
+
+      <!-- Recent Orders Teaser -->
+      {% if recent_orders %}
+        <div class="panel shadow-sm">
+          <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+            <h6 class="mb-0">Recent Orders</h6>
+            <a href="{% url 'orders' %}" class="small text-warning fw-semibold text-decoration-none">View All Orders &rsaquo;</a>
+          </div>
+          <div class="table-responsive">
+            <table class="tbl mb-0">
+              <thead>
+                <tr>
+                  <th>Order #</th>
+                  <th>Date</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for order in recent_orders %}
+                  <tr>
+                    <td><b>{{ order.order_number }}</b></td>
+                    <td class="text-muted">{{ order.created_at|date:"M d, Y" }}</td>
+                    <td><b>₹{{ order.total_amount }}</b></td>
+                    <td>
+                      <span class="badge {% if order.status == 'Delivered' %}bg-success{% elif order.status == 'Shipped' %}bg-primary{% elif order.status == 'Cancelled' %}bg-danger{% else %}bg-warning text-navy{% endif %}">
+                        {{ order.status }}
+                      </span>
+                    </td>
+                    <td>
+                      <a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 12px;">Details</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

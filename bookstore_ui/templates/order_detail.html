@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }} - BookStore{% endblock %}
+{% block newsletter %}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="crumbs mb-2">
+    <a href="{% url 'home' %}">Home</a> &rsaquo; <a href="{% url 'orders' %}">Orders</a> &rsaquo; {{ order.order_number }}
+  </div>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h2 class="serif fs-4 mb-1">Order #{{ order.order_number }}</h2>
+      <p class="text-muted small mb-0">Placed on {{ order.created_at|date:"F d, Y \a\t H:i" }}</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge fs-6 px-3 py-2 {% if order.status == 'Delivered' %}bg-success{% elif order.status == 'Shipped' %}bg-primary{% elif order.status == 'Cancelled' %}bg-danger{% else %}bg-warning text-navy{% endif %}">
+        {{ order.status }}
+      </span>
+      {% if order.status == 'Pending' %}
+        <form method="post" action="{% url 'order_cancel' order.pk %}" class="d-inline" data-confirm="Are you sure you want to cancel this order? Book stock will be restored immediately.">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm py-1 px-3">
+            <i class="bi bi-x-circle me-1"></i> Cancel Order
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Status Timeline -->
+  <div class="panel shadow-sm mb-4">
+    <h6 class="mb-3">Order Status</h6>
+    {% if order.status == 'Cancelled' %}
+      <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
+        <i class="bi bi-x-octagon-fill fs-5"></i>
+        <div>This order has been <b>Cancelled</b>. Any reserved book stock has been restored.</div>
+      </div>
+    {% else %}
+      <div class="steps mb-0">
+        <span class="{% if order.status == 'Pending' or order.status == 'Confirmed' or order.status == 'Shipped' or order.status == 'Delivered' %}on{% endif %} d-flex gap-2 align-items-center">
+          <span class="n">1</span>Pending
+        </span>
+        <hr>
+        <span class="{% if order.status == 'Confirmed' or order.status == 'Shipped' or order.status == 'Delivered' %}on{% endif %} d-flex gap-2 align-items-center">
+          <span class="n">2</span>Confirmed
+        </span>
+        <hr>
+        <span class="{% if order.status == 'Shipped' or order.status == 'Delivered' %}on{% endif %} d-flex gap-2 align-items-center">
+          <span class="n">3</span>Shipped
+        </span>
+        <hr>
+        <span class="{% if order.status == 'Delivered' %}on{% endif %} d-flex gap-2 align-items-center">
+          <span class="n">4</span>Delivered
+        </span>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="row g-4">
+    <!-- Left Column: Items Ordered -->
+    <div class="col-lg-8">
+      <div class="panel shadow-sm mb-4">
+        <h6 class="border-bottom pb-2 mb-3">Items in this Order</h6>
+        {% for item in order.items.all %}
+          <div class="bcard row-card border-0 p-0 mb-3 pb-3 border-bottom">
+            {% with b=item.book %}
+              {% include "partials/cover.html" %}
+            {% endwith %}
+            <div class="row-details">
+              <h5><a href="{% url 'book_detail' item.book.id %}" class="text-decoration-none text-navy">{{ item.book.title }}</a></h5>
+              <div class="au mb-1">{{ item.book.author }}</div>
+              <div class="small text-muted">Price: ₹{{ item.price }} &times; {{ item.quantity }}</div>
+            </div>
+            <div class="row-actions">
+              <span class="row-price">₹{{ item.line_total }}</span>
+            </div>
+          </div>
+        {% endfor %}
+
+        <div class="pt-2">
+          <div class="sum-row"><span>Subtotal</span><span>₹{{ order.subtotal }}</span></div>
+          <div class="sum-row">
+            <span>Shipping</span>
+            <span>{% if order.shipping_fee == 0 %}<b class="text-success">Free</b>{% else %}₹{{ order.shipping_fee }}{% endif %}</span>
+          </div>
+          <div class="sum-row tot"><span>Total</span><span>₹{{ order.total_amount }}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Shipping & Payment Details -->
+    <div class="col-lg-4">
+      <div class="panel shadow-sm mb-4">
+        <h6 class="border-bottom pb-2 mb-3">Delivery Details</h6>
+        <p class="mb-1 fw-bold text-navy">{{ order.name }}</p>
+        <p class="mb-1 text-muted small">{{ order.address_line1 }}</p>
+        {% if order.address_line2 %}
+          <p class="mb-1 text-muted small">{{ order.address_line2 }}</p>
+        {% endif %}
+        <p class="mb-1 text-muted small">{{ order.city }}, {{ order.state }} - {{ order.pin }}</p>
+        <p class="mb-3 text-muted small"><i class="bi bi-telephone me-1"></i>{{ order.phone }}</p>
+
+        <h6 class="border-bottom pb-2 mb-2 pt-2">Payment Details</h6>
+        <p class="small text-muted mb-1">Method: <b class="text-navy">{{ order.payment_method }}</b></p>
+        <p class="small text-muted mb-0">Total: <b class="text-navy">₹{{ order.total_amount }}</b></p>
+      </div>
+
+      <div class="d-flex flex-column gap-2">
+        <a href="{% url 'orders' %}" class="btn-line text-center py-2 text-decoration-none text-navy">
+          <i class="bi bi-arrow-left me-1"></i> Back to Orders
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
