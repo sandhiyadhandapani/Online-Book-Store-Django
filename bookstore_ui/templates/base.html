@@ -26,7 +26,11 @@
     <a href="{% url 'books' %}" aria-label="Search"><i class="bi bi-search"></i></a>
     <a href="{% url 'wishlist' %}" aria-label="Wishlist" class="position-relative">
       <i class="bi bi-heart"></i>
-      <span class="badge-cart badge-wishlist" style="background:#e04848; {% if not wishlist_count %}display:none;{% endif %}">{{ wishlist_count }}</span>
+      {% if wishlist_count %}
+        <span class="badge-cart badge-wishlist" style="background:#e04848;">{{ wishlist_count }}</span>
+      {% else %}
+        <span class="badge-cart badge-wishlist" style="background:#e04848; display:none;">{{ wishlist_count }}</span>
+      {% endif %}
     </a>
     <a href="{% url 'cart' %}" aria-label="Cart" class="position-relative">
       <i class="bi bi-cart3"></i><span class="badge-cart">{{ cart_count }}</span>

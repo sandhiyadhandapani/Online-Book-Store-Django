@@ -470,5 +470,16 @@ window.addEventListener('hashchange', () => {
   }
 });
 
+// Dynamic star rating fill based on data-pct
+function initStars() {
+  document.querySelectorAll('.stars[data-pct]').forEach(el => {
+    const pct = parseFloat(el.dataset.pct);
+    if (!isNaN(pct)) {
+      el.style.setProperty('--p', pct + '%');
+    }
+  });
+}
+
+initStars();
 syncNavState();
 initScrollSpy();

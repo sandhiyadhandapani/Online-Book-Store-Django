@@ -8,7 +8,7 @@
     <div class="col-md-5">
       <h1 class="d-title">{{ book.title }}</h1>
       <div class="text-muted mb-1">{{ book.author }}</div>
-      <div class="mb-2"><span class="stars" style="--p:{{ book.pct }}%">★★★★★</span> <span class="rt">{{ book.rating }} ({{ book.reviews }} reviews)</span></div>
+      <div class="mb-2"><span class="stars" data-pct="{{ book.pct }}">★★★★★</span> <span class="rt">{{ book.rating }} ({{ book.reviews }} reviews)</span></div>
       <div class="price mb-3"><b style="font-size:1.8rem">₹{{ book.price }}</b>{% if book.old_price %}<s>₹{{ book.old_price }}</s>{% endif %}{% if book.discount_percent %}<em>{{ book.discount_percent }}% OFF</em>{% endif %}</div>
       <form method="post" action="{% url 'cart_add' book.id %}" class="d-flex gap-2 align-items-center mb-2">{% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">

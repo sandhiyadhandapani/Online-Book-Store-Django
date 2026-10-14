@@ -24,6 +24,7 @@ label.lbl{font-size:12px;font-weight:600;margin-bottom:4px;display:block;color:v
 .bs-nav .links a:hover::after,.bs-nav .links a.active::after{transform:scaleX(1)}
 .bs-nav .icons a{margin-left:1rem;position:relative;font-size:1.1rem}
 .badge-cart{position:absolute;top:-8px;right:-10px;background:var(--orange);font-size:10px;border-radius:50%;width:16px;height:16px;display:grid;place-items:center}
+.badge-wishlist{background:#e04848}
 .menu-toggle{padding:0;border:0;background:transparent;color:#fff;font-size:1.4rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;cursor:pointer;transition:background .18s ease,color .18s ease}
 .menu-toggle:hover{color:var(--orange);background:rgba(255,255,255,.08)}
 

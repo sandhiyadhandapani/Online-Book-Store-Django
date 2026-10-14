@@ -13,7 +13,7 @@
     <h5>{{ b.title }}</h5>
   </a>
   <div class="au">{{ b.author }}</div>
-  <div><span class="stars" style="--p:{{ b.pct }}%">★★★★★</span> <span class="rt">{{ b.rating }} ({{ b.reviews }})</span></div>
+  <div><span class="stars" data-pct="{{ b.pct }}">★★★★★</span> <span class="rt">{{ b.rating }} ({{ b.reviews }})</span></div>
   <div class="price"><b>₹{{ b.price }}</b>{% if b.old_price %}<s>₹{{ b.old_price }}</s>{% endif %}</div>
   <form method="post" action="{% url 'cart_add' b.id %}" class="mt-auto w-100">
     {% csrf_token %}
