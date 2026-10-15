@@ -1,9 +1,10 @@
 import csv
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 from django.http import HttpResponse
 from django.utils.html import format_html
 from .models import Category, Book, Subscriber, Order, OrderItem
+from .ai import generate_book_summary, AISummaryError
 
 # Customize Admin Site Headers
 admin.site.site_header = "BookStore Admin"
@@ -56,7 +57,7 @@ class BookAdmin(admin.ModelAdmin):
         "is_active",
     )
     prepopulated_fields = {"slug": ("title",)}
-    readonly_fields = ("cover_preview", "created_at", "updated_at")
+    readonly_fields = ("cover_preview", "created_at", "updated_at", "ai_summary_updated")
     ordering = ("-created_at",)
 
     fieldsets = (
@@ -83,6 +84,9 @@ class BookAdmin(admin.ModelAdmin):
         ("Featured Sections", {
             "fields": ("is_best_seller", "is_new_arrival", "is_audiobook")
         }),
+        ("AI Summary", {
+            "fields": ("ai_summary", "ai_summary_updated")
+        }),
         ("Status", {
             "fields": ("is_active", "created_at", "updated_at")
         }),
@@ -95,6 +99,8 @@ class BookAdmin(admin.ModelAdmin):
         "remove_new_arrival",
         "activate_books",
         "deactivate_books",
+        "clear_ai_summary",
+        "generate_ai_summary",
     ]
 
     @admin.display(description="Cover")
@@ -157,6 +163,45 @@ class BookAdmin(admin.ModelAdmin):
     def deactivate_books(self, request, queryset):
         updated = queryset.update(is_active=False)
         self.message_user(request, f"{updated} book(s) deactivated.")
+
+    @admin.action(description="Clear AI summary")
+    def clear_ai_summary(self, request, queryset):
+        updated = queryset.update(ai_summary="", ai_summary_updated=None)
+        self.message_user(request, f"Cleared AI summary for {updated} book(s).")
+
+    @admin.action(description="Generate AI summary")
+    def generate_ai_summary(self, request, queryset):
+        if queryset.count() > 10:
+            self.message_user(
+                request,
+                "Please select at most 10 books at once for AI summary generation.",
+                level=messages.WARNING
+            )
+            return
+
+        success_count = 0
+        for book in queryset:
+            try:
+                generate_book_summary(book, save=True)
+                success_count += 1
+            except AISummaryError as e:
+                self.message_user(
+                    request,
+                    f"Failed to generate summary for '{book.title}': {e}",
+                    level=messages.ERROR
+                )
+            except Exception:
+                self.message_user(
+                    request,
+                    f"Unexpected error generating summary for '{book.title}'.",
+                    level=messages.ERROR
+                )
+
+        if success_count:
+            self.message_user(
+                request,
+                f"Successfully generated AI summary for {success_count} book(s)."
+            )
 
 
 @admin.register(Subscriber)

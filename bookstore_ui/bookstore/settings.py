@@ -13,9 +13,13 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 import sys
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env')
 
 if "test" in sys.argv:
     PASSWORD_HASHERS = [
@@ -34,6 +38,31 @@ SECRET_KEY = os.environ.get(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+
+# Gemini AI Settings
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+GEMINI_FALLBACK_MODELS = os.environ.get(
+    'GEMINI_FALLBACK_MODELS',
+    'gemini-2.5-flash,gemini-flash-latest,gemini-2.5-flash-lite'
+)
+try:
+    GEMINI_MAX_OUTPUT_TOKENS = int(os.environ.get('GEMINI_MAX_OUTPUT_TOKENS', 2048))
+except (ValueError, TypeError):
+    GEMINI_MAX_OUTPUT_TOKENS = 2048
+try:
+    GEMINI_TIMEOUT = int(os.environ.get('GEMINI_TIMEOUT', 15))
+except (ValueError, TypeError):
+    GEMINI_TIMEOUT = 15
+
+
+# Cache Framework Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'bookstore-cache',
+    }
+}
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -138,7 +167,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

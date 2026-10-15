@@ -1,8 +1,11 @@
+import logging
+import time
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.validators import EmailValidator
 from django.core.exceptions import ValidationError
@@ -15,6 +18,9 @@ from django.urls import reverse
 from .models import Book, Category, Order, OrderItem, Subscriber, UserProfile, Wishlist
 from .forms import BookForm, RegisterForm, LoginForm, CheckoutForm, ProfileForm
 from .cart import Cart
+from .ai import generate_book_summary, AISummaryError, shorten_to_sentences
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 email_validator = EmailValidator()
@@ -122,11 +128,15 @@ def book_list(request):
 
 
 def book_detail(request, pk=1):
-    book = get_object_or_404(
-        Book.objects.select_related("category"),
-        pk=pk,
-        is_active=True
-    )
+    try:
+        book = Book.objects.select_related("category").get(pk=pk, is_active=True)
+    except Book.DoesNotExist:
+        if pk == 1:
+            first_book = Book.objects.select_related("category").filter(is_active=True).order_by("pk").first()
+            if first_book:
+                return redirect("book_detail", pk=first_book.pk)
+        raise Http404("Book not found")
+
     related = Book.objects.filter(
         category=book.category,
         is_active=True
@@ -137,6 +147,111 @@ def book_detail(request, pk=1):
         book=book,
         related=related,
     ))
+
+
+def _get_ai_client_key(request):
+    """Generate a unique cache key for rate limiting per client (session key or IP)."""
+    if hasattr(request, "session"):
+        if not request.session.session_key:
+            try:
+                request.session.save()
+            except Exception:
+                pass
+        if request.session.session_key:
+            return f"ai_rate_session_{request.session.session_key}"
+
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.META.get("REMOTE_ADDR", "unknown")
+    return f"ai_rate_ip_{ip}"
+
+
+def book_summary(request, pk):
+    """
+    POST /books/<id>/summary/ (name 'book_summary')
+    CSRF protected, only active books (404 otherwise).
+    Returns JSON {"ok": true, "summary": "...", "cached": true/false} or
+    {"ok": false, "error": "..."} with proper status codes.
+    GET returns 405.
+    If book.ai_summary exists, return it (cached) without calling the API.
+    Query param or POST field 'refresh=1' regenerates, but only for staff users.
+    Rate limit: max 5 generation calls per minute per client (429).
+    """
+    if request.method != "POST":
+        resp = JsonResponse({"ok": False, "error": "Method not allowed"}, status=405)
+        resp["Allow"] = "POST"
+        return resp
+
+    try:
+        book = Book.objects.get(pk=pk, is_active=True)
+    except Book.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Book not found or is currently inactive."}, status=404)
+
+    refresh = (request.POST.get("refresh") == "1" or request.GET.get("refresh") == "1")
+    is_staff = bool(request.user.is_authenticated and request.user.is_staff)
+    can_refresh = refresh and is_staff
+
+    # Return cached summary if present and refresh was not requested by staff
+    if book.ai_summary and not can_refresh:
+        return JsonResponse({"ok": True, "summary": book.ai_summary, "cached": True})
+
+    # Rate limiting: max 5 generation calls per minute per client
+    client_key = _get_ai_client_key(request)
+    now = time.time()
+    call_history = cache.get(client_key, [])
+    call_history = [t for t in call_history if now - t < 60]
+
+    if len(call_history) >= 5:
+        return JsonResponse(
+            {"ok": False, "error": "Please wait a moment and try again."},
+            status=429
+        )
+
+    call_history.append(now)
+    cache.set(client_key, call_history, timeout=60)
+
+    try:
+        summary = generate_book_summary(book, save=True)
+        return JsonResponse({"ok": True, "summary": summary, "cached": False})
+    except AISummaryError as e:
+        if getattr(e, "is_config_error", False):
+            status_code = getattr(e, "status_code", 503)
+            return JsonResponse({"ok": False, "error": str(e)}, status=status_code)
+
+        # Honest fallback content: if every model fails, return book description (Item 4)
+        desc = (book.description or "").strip()
+        if desc:
+            fallback_text = shorten_to_sentences(desc, max_sentences=2)
+            if fallback_text:
+                return JsonResponse({
+                    "ok": True,
+                    "summary": fallback_text,
+                    "source": "description"
+                })
+
+        # If book has no description: Item 4 and 5
+        status_code = getattr(e, "status_code", 503)
+        return JsonResponse(
+            {"ok": False, "error": str(e)},
+            status=status_code
+        )
+    except Exception as e:
+        logger.exception("Unexpected error in book_summary view for book %s: %s", pk, e)
+        desc = (book.description or "").strip()
+        if desc:
+            fallback_text = shorten_to_sentences(desc, max_sentences=2)
+            if fallback_text:
+                return JsonResponse({
+                    "ok": True,
+                    "summary": fallback_text,
+                    "source": "description"
+                })
+        return JsonResponse(
+            {"ok": False, "error": "The AI is busy right now. Please try again in a few seconds."},
+            status=500
+        )
 
 
 def _redirect_back(request, fallback="cart"):
@@ -848,7 +963,12 @@ def wishlist_toggle(request, book_id):
             return JsonResponse({"error": "login_required", "login_url": login_url}, status=401)
         return redirect(login_url)
 
-    book = get_object_or_404(Book, pk=book_id, is_active=True)
+    try:
+        book = Book.objects.get(pk=book_id, is_active=True)
+    except Book.DoesNotExist:
+        if is_ajax:
+            return JsonResponse({"error": "not_found", "message": "Book not found."}, status=404)
+        raise Http404("Book not found")
     wishlist_item = Wishlist.objects.filter(user=request.user, book=book).first()
 
     if wishlist_item:

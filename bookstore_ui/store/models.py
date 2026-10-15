@@ -82,6 +82,8 @@ class Book(models.Model):
     is_new_arrival = models.BooleanField(default=False, db_index=True)
     is_audiobook = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True, db_index=True)
+    ai_summary = models.TextField(blank=True)
+    ai_summary_updated = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 

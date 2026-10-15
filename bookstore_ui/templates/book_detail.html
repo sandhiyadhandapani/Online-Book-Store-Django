@@ -46,9 +46,10 @@
   <section class="ai-box">
     <div class="top">
       <div><h4><i class="bi bi-stars text-primary"></i> AI Book Summary</h4><small>Powered by Google Gemini</small></div>
-      <button id="aiBtn" class="btn-or" data-url="#" data-demo="{{ book.title }} teaches you how small, consistent changes in your daily routine can lead to massive results. It explains the science of habits and gives practical strategies to build good habits, break bad ones, and design a better future through simple and effective routines.">Generate Summary</button>
+      <button id="aiBtn" class="btn-or" data-url="{% url 'book_summary' book.id %}"{% if request.user.is_staff %} data-is-staff="true"{% endif %}{% if book.ai_summary %}{% if request.user.is_staff %} data-refresh="1">Regenerate summary{% else %} style="display:none;">Generate Summary{% endif %}{% else %}>Generate Summary{% endif %}</button>
     </div>
-    <div class="ai-out" id="aiOut">Select "Generate Summary" to get a quick overview of this book.</div>
+    <div class="ai-out" id="aiOut" aria-live="polite">{% if book.ai_summary %}{{ book.ai_summary }}{% else %}Select "Generate Summary" to get a quick overview of this book.{% endif %}</div>
+    <small class="ai-disclaimer text-muted d-block mt-2" style="font-size:0.75rem;">AI generated, may contain mistakes.</small>
   </section>
 
   {% if related %}

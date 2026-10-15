@@ -204,18 +204,102 @@ document.addEventListener('submit', function(e) {
 });
 
 
-// AI summary (TEAM 4: replace the demo block with fetch(btn.dataset.url) -> Gemini view)
+// AI summary (TEAM 4: fetch Gemini summary via POST)
 const aiBtn = document.getElementById('aiBtn');
-if (aiBtn) aiBtn.onclick = () => {
-  const out = document.getElementById('aiOut');
-  out.textContent = 'Generating summary...';
-  aiBtn.disabled = true;
-  setTimeout(() => {
-    out.textContent = aiBtn.dataset.demo;
-    aiBtn.disabled = false;
-    aiBtn.textContent = 'Regenerate summary';
-  }, 900);
-};
+const aiOut = document.getElementById('aiOut');
+
+if (aiBtn && aiOut) {
+  aiBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    const url = aiBtn.dataset.url;
+    if (!url || url === '#') return;
+
+    const originalText = aiBtn.textContent;
+    aiBtn.disabled = true;
+    aiBtn.textContent = 'Generating...';
+
+    aiOut.style.color = '';
+    aiOut.textContent = 'Generating summary...';
+
+    // Retrieve CSRF token from form or cookie
+    let csrfToken = '';
+    const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (csrfInput && csrfInput.value) {
+      csrfToken = csrfInput.value;
+    } else {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/);
+      if (match) {
+        csrfToken = decodeURIComponent(match[1]);
+      }
+    }
+
+    const isRefresh = (aiBtn.dataset.refresh === '1');
+    const formData = new URLSearchParams();
+    if (isRefresh) {
+      formData.append('refresh', '1');
+    }
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrfToken,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: formData.toString()
+    })
+    .then(res => {
+      return res.json().then(data => ({ status: res.status, ok: res.ok, data: data })).catch(() => ({
+        status: res.status,
+        ok: false,
+        data: { ok: false, error: 'Invalid response from server.' }
+      }));
+    })
+    .then(result => {
+      const { ok, data } = result;
+      if (ok && data && data.ok) {
+        if (data.source === 'description') {
+          aiOut.textContent = '';
+          const noteElem = document.createElement('div');
+          noteElem.className = 'text-muted mb-2 fst-italic';
+          noteElem.textContent = 'AI is busy right now. Showing the book description instead.';
+          const bodyElem = document.createElement('div');
+          bodyElem.textContent = data.summary;
+          aiOut.appendChild(noteElem);
+          aiOut.appendChild(bodyElem);
+          aiOut.style.color = '';
+
+          aiBtn.disabled = false;
+          aiBtn.textContent = 'Try again';
+          aiBtn.style.display = '';
+        } else {
+          aiOut.textContent = data.summary;
+          aiOut.style.color = '';
+          if (aiBtn.dataset.isStaff === 'true') {
+            aiBtn.disabled = false;
+            aiBtn.textContent = 'Regenerate summary';
+            aiBtn.dataset.refresh = '1';
+          } else {
+            aiBtn.style.display = 'none';
+          }
+        }
+      } else {
+        const errorMsg = (data && data.error) ? data.error : 'The AI is busy right now. Please try again in a few seconds.';
+        aiOut.textContent = errorMsg;
+        aiOut.style.color = '#dc3545';
+        aiBtn.disabled = false;
+        aiBtn.textContent = 'Try again';
+      }
+    })
+    .catch(err => {
+      aiOut.textContent = 'Could not reach the AI service. Check your internet connection and try again.';
+      aiOut.style.color = '#dc3545';
+      aiBtn.disabled = false;
+      aiBtn.textContent = 'Try again';
+    });
+  });
+}
+
 
 const filterForm = document.getElementById('filterForm');
 if (filterForm) {

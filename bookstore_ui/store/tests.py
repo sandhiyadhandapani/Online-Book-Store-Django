@@ -1,10 +1,13 @@
 import hashlib
 import io
+import requests
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -1377,6 +1380,683 @@ class Team3Tests(TestCase):
         data = res_ajax.json()
         self.assertEqual(data["error"], "login_required")
         self.assertIn("/login/", data["login_url"])
+
+
+class AISummaryTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        from django.conf import settings
+        cache.clear()
+
+        self.client = Client()
+        self.category = Category.objects.create(name="Science Fiction", icon="bi-rocket")
+        self.book = Book.objects.create(
+            title="Project Hail Mary",
+            author="Andy Weir",
+            category=self.category,
+            price=Decimal("499.00"),
+            stock=10,
+            is_active=True,
+        )
+        self.inactive_book = Book.objects.create(
+            title="Archived Book",
+            author="Unknown",
+            category=self.category,
+            price=Decimal("199.00"),
+            stock=0,
+            is_active=False,
+        )
+        self.regular_user = User.objects.create_user(username="normaluser", password="password123")
+        self.staff_user = User.objects.create_user(username="adminuser", password="password123", is_staff=True)
+
+    @patch("requests.post")
+    def test_ai_summary_success_and_caching(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Project Hail Mary is an exhilarating story of survival and science. Ryland Grace must solve an extinction-level threat. He awakens alone with amnesia on a desperate space mission."}
+                        ]
+                    },
+                    "finishReason": "STOP"
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            url = reverse("book_summary", args=[self.book.id])
+            res1 = self.client.post(url)
+            self.assertEqual(res1.status_code, 200)
+            data1 = res1.json()
+            self.assertTrue(data1["ok"])
+            self.assertFalse(data1["cached"])
+            self.assertIn("Project Hail Mary is an exhilarating", data1["summary"])
+            mock_post.assert_called_once()
+
+            # Verify saved in database
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, data1["summary"])
+            self.assertIsNotNone(self.book.ai_summary_updated)
+
+            # Second call should return cached summary without calling API again
+            res2 = self.client.post(url)
+            self.assertEqual(res2.status_code, 200)
+            data2 = res2.json()
+            self.assertTrue(data2["ok"])
+            self.assertTrue(data2["cached"])
+            self.assertEqual(data2["summary"], data1["summary"])
+            self.assertEqual(mock_post.call_count, 1)
+
+    @patch("requests.post")
+    def test_ai_summary_refresh_works_only_for_staff(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Brand new regenerated summary for Project Hail Mary."}
+                        ]
+                    },
+                    "finishReason": "STOP"
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        # Seed existing summary
+        self.book.ai_summary = "Old cached summary."
+        self.book.save(update_fields=["ai_summary"])
+
+        url = reverse("book_summary", args=[self.book.id])
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            # 1. Non-staff user sends refresh=1 -> ignored, returns cached summary
+            self.client.login(username="normaluser", password="password123")
+            res_user = self.client.post(url, {"refresh": "1"})
+            self.assertEqual(res_user.status_code, 200)
+            data_user = res_user.json()
+            self.assertTrue(data_user["ok"])
+            self.assertTrue(data_user["cached"])
+            self.assertEqual(data_user["summary"], "Old cached summary.")
+            self.assertEqual(mock_post.call_count, 0)
+            self.client.logout()
+
+            # 2. Staff user sends refresh=1 -> regenerates summary
+            self.client.login(username="adminuser", password="password123")
+            res_staff = self.client.post(url, {"refresh": "1"})
+            self.assertEqual(res_staff.status_code, 200)
+            data_staff = res_staff.json()
+            self.assertTrue(data_staff["ok"])
+            self.assertFalse(data_staff["cached"])
+            self.assertEqual(data_staff["summary"], "Brand new regenerated summary for Project Hail Mary.")
+            self.assertEqual(mock_post.call_count, 1)
+
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "Brand new regenerated summary for Project Hail Mary.")
+
+    @patch("requests.post")
+    def test_ai_summary_error_handling_no_crashes_and_no_junk(self, mock_post):
+        url = reverse("book_summary", args=[self.book.id])
+
+        # 1. Missing Key
+        with patch.object(settings, "GEMINI_API_KEY", ""):
+            with patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
+                res_no_key = self.client.post(url)
+                self.assertFalse(res_no_key.json()["ok"])
+                self.book.refresh_from_db()
+                self.assertEqual(self.book.ai_summary, "")
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            # 2. Timeout
+            mock_post.side_effect = requests.exceptions.Timeout("Connection timed out")
+            res_timeout = self.client.post(url)
+            self.assertFalse(res_timeout.json()["ok"])
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "")
+
+            # 3. Connection Error
+            mock_post.side_effect = requests.exceptions.ConnectionError("Network down")
+            res_conn = self.client.post(url)
+            self.assertFalse(res_conn.json()["ok"])
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "")
+
+            # 4. HTTP 403 (Invalid Key)
+            mock_post.side_effect = None
+            mock_403 = MagicMock()
+            mock_403.status_code = 403
+            mock_post.return_value = mock_403
+            res_403 = self.client.post(url)
+            self.assertFalse(res_403.json()["ok"])
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "")
+
+            # 5. Empty Response / No Candidates
+            mock_empty = MagicMock()
+            mock_empty.status_code = 200
+            mock_empty.json.return_value = {"candidates": []}
+            mock_post.return_value = mock_empty
+            res_empty = self.client.post(url)
+            self.assertFalse(res_empty.json()["ok"])
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "")
+
+            # 6. Invalid JSON
+            mock_invalid_json = MagicMock()
+            mock_invalid_json.status_code = 200
+            mock_invalid_json.json.side_effect = ValueError("Invalid JSON string")
+            mock_post.return_value = mock_invalid_json
+            res_json_err = self.client.post(url)
+            self.assertFalse(res_json_err.json()["ok"])
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "")
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_ai_summary_429_retry_then_success(self, mock_post, mock_sleep):
+        mock_429 = MagicMock()
+        mock_429.status_code = 429
+
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Summary succeeded after rate limit retry."}
+                        ]
+                    },
+                    "finishReason": "STOP"
+                }
+            ]
+        }
+        mock_post.side_effect = [mock_429, mock_200]
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            url = reverse("book_summary", args=[self.book.id])
+            res = self.client.post(url)
+            self.assertEqual(res.status_code, 200)
+            self.assertTrue(res.json()["ok"])
+            self.assertEqual(res.json()["summary"], "Summary succeeded after rate limit retry.")
+            self.assertTrue(mock_sleep.called)
+            self.assertEqual(mock_post.call_count, 2)
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_503_then_200_succeeds_on_retry(self, mock_post, mock_sleep):
+        mock_503 = MagicMock()
+        mock_503.status_code = 503
+
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "Summary succeeded after 503 retry."}]
+                    },
+                    "finishReason": "STOP"
+                }
+            ]
+        }
+        mock_post.side_effect = [mock_503, mock_200]
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            url = reverse("book_summary", args=[self.book.id])
+            res = self.client.post(url)
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["summary"], "Summary succeeded after 503 retry.")
+            self.assertEqual(mock_post.call_count, 2)
+            self.assertTrue(mock_sleep.called)
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "Summary succeeded after 503 retry.")
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_503_on_main_model_success_on_fallback_model(self, mock_post, mock_sleep):
+        mock_503 = MagicMock()
+        mock_503.status_code = 503
+
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "Summary succeeded on fallback model."}]
+                    },
+                    "finishReason": "STOP"
+                }
+            ]
+        }
+        mock_post.side_effect = [mock_503, mock_503, mock_503, mock_200]
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            with patch.object(settings, "GEMINI_MODEL", "main-gemini"):
+                with patch.object(settings, "GEMINI_FALLBACK_MODELS", "fallback-gemini"):
+                    url = reverse("book_summary", args=[self.book.id])
+                    res = self.client.post(url)
+                    self.assertEqual(res.status_code, 200)
+                    data = res.json()
+                    self.assertTrue(data["ok"])
+                    self.assertEqual(data["summary"], "Summary succeeded on fallback model.")
+                    self.assertEqual(mock_post.call_count, 4)
+                    self.assertIn("models/main-gemini", mock_post.call_args_list[0][0][0])
+                    self.assertIn("models/fallback-gemini", mock_post.call_args_list[3][0][0])
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_404_moves_to_fallback(self, mock_post, mock_sleep):
+        mock_404 = MagicMock()
+        mock_404.status_code = 404
+
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "Summary succeeded after 404 on fallback."}]
+                    },
+                    "finishReason": "STOP"
+                }
+            ]
+        }
+        mock_post.side_effect = [mock_404, mock_200]
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            with patch.object(settings, "GEMINI_MODEL", "legacy-model"):
+                with patch.object(settings, "GEMINI_FALLBACK_MODELS", "new-model"):
+                    url = reverse("book_summary", args=[self.book.id])
+                    res = self.client.post(url)
+                    self.assertEqual(res.status_code, 200)
+                    data = res.json()
+                    self.assertTrue(data["ok"])
+                    self.assertEqual(data["summary"], "Summary succeeded after 404 on fallback.")
+                    self.assertEqual(mock_post.call_count, 2)
+                    self.assertIn("models/legacy-model", mock_post.call_args_list[0][0][0])
+                    self.assertIn("models/new-model", mock_post.call_args_list[1][0][0])
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_403_does_not_retry(self, mock_post, mock_sleep):
+        mock_403 = MagicMock()
+        mock_403.status_code = 403
+        mock_post.return_value = mock_403
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            with patch.object(settings, "GEMINI_FALLBACK_MODELS", "fallback-1,fallback-2"):
+                url = reverse("book_summary", args=[self.book.id])
+                res = self.client.post(url)
+                self.assertFalse(res.json()["ok"])
+                self.assertEqual(res.json()["error"], "AI service is not configured.")
+                self.assertEqual(mock_post.call_count, 1)
+                self.assertFalse(mock_sleep.called)
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_all_models_fail_with_book_description_returns_description_fallback_and_saves_nothing(self, mock_post, mock_sleep):
+        mock_503 = MagicMock()
+        mock_503.status_code = 503
+        mock_post.return_value = mock_503
+
+        book_with_desc = Book.objects.create(
+            title="Dune",
+            author="Frank Herbert",
+            category=self.category,
+            price=Decimal("599.00"),
+            stock=5,
+            is_active=True,
+            description="Set on the desert planet Arrakis, Dune is the story of Paul Atreides. It is an incredible masterpiece of science fiction. Extra third sentence that should be omitted."
+        )
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            with patch.object(settings, "GEMINI_MODEL", "main-m"):
+                with patch.object(settings, "GEMINI_FALLBACK_MODELS", "fallback-m"):
+                    url = reverse("book_summary", args=[book_with_desc.id])
+                    res = self.client.post(url)
+                    self.assertEqual(res.status_code, 200)
+                    data = res.json()
+                    self.assertTrue(data["ok"])
+                    self.assertEqual(data.get("source"), "description")
+                    self.assertEqual(
+                        data["summary"],
+                        "Set on the desert planet Arrakis, Dune is the story of Paul Atreides. It is an incredible masterpiece of science fiction."
+                    )
+                    book_with_desc.refresh_from_db()
+                    self.assertEqual(book_with_desc.ai_summary, "")
+                    self.assertIsNone(book_with_desc.ai_summary_updated)
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_all_models_fail_without_description_returns_friendly_error(self, mock_post, mock_sleep):
+        mock_503 = MagicMock()
+        mock_503.status_code = 503
+        mock_post.return_value = mock_503
+
+        self.assertEqual(self.book.description, "")
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            with patch.object(settings, "GEMINI_MODEL", "main-m"):
+                with patch.object(settings, "GEMINI_FALLBACK_MODELS", "fallback-m"):
+                    url = reverse("book_summary", args=[self.book.id])
+                    res = self.client.post(url)
+                    data = res.json()
+                    self.assertFalse(data["ok"])
+                    self.assertEqual(data["error"], "The AI is busy right now. Please try again in a few seconds.")
+                    self.book.refresh_from_db()
+                    self.assertEqual(self.book.ai_summary, "")
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_finish_reason_max_tokens_is_not_saved(self, mock_post, mock_sleep):
+        mock_max_tokens = MagicMock()
+        mock_max_tokens.status_code = 200
+        mock_max_tokens.json.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "Truncated incomplete text that was cut off"}]
+                    },
+                    "finishReason": "MAX_TOKENS"
+                }
+            ]
+        }
+        mock_post.return_value = mock_max_tokens
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            with patch.object(settings, "GEMINI_MODEL", "main-m"):
+                with patch.object(settings, "GEMINI_FALLBACK_MODELS", ""):
+                    url = reverse("book_summary", args=[self.book.id])
+                    res = self.client.post(url)
+                    self.assertFalse(res.json()["ok"])
+                    self.book.refresh_from_db()
+                    self.assertEqual(self.book.ai_summary, "")
+
+    @patch("time.sleep")
+    @patch("requests.post")
+    def test_key_never_appears_in_logs_or_responses(self, mock_post, mock_sleep):
+        CANARY_SECRET = "AIzaSyCANARY_SECRET_KEY_NEVER_LEAK_999"
+        mock_503 = MagicMock()
+        mock_503.status_code = 503
+        mock_503.text = f"Error mentioning {CANARY_SECRET} in server response"
+        mock_post.return_value = mock_503
+
+        with patch.object(settings, "GEMINI_API_KEY", CANARY_SECRET):
+            with self.assertLogs("store.ai", level="WARNING") as cm:
+                url = reverse("book_summary", args=[self.book.id])
+                res = self.client.post(url)
+                res_content = res.content.decode("utf-8")
+                self.assertNotIn(CANARY_SECRET, res_content)
+
+                for log_msg in cm.output:
+                    self.assertNotIn(CANARY_SECRET, log_msg)
+
+    @patch("requests.post")
+    def test_check_ai_command(self, mock_post):
+        from django.core.management import call_command
+        from io import StringIO
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_post.return_value = mock_resp
+
+        out = StringIO()
+        CANARY_SECRET = "MY_SPECIAL_CHECK_AI_KEY_777"
+        with patch.object(settings, "GEMINI_API_KEY", CANARY_SECRET):
+            with patch.object(settings, "GEMINI_MODEL", "test-model"):
+                with patch.object(settings, "GEMINI_FALLBACK_MODELS", "test-fallback"):
+                    call_command("check_ai", stdout=out)
+                    output = out.getvalue()
+                    self.assertIn(f"key set, length {len(CANARY_SECRET)}", output)
+                    self.assertIn("test-model: HTTP 200 - OK", output)
+                    self.assertIn("test-fallback: HTTP 200 - OK", output)
+                    self.assertNotIn(CANARY_SECRET, output)
+
+
+    def test_inactive_book_returns_404_and_get_returns_405(self):
+        # Inactive book
+        url_inactive = reverse("book_summary", args=[self.inactive_book.id])
+        res_inactive = self.client.post(url_inactive)
+        self.assertEqual(res_inactive.status_code, 404)
+
+        # Non-existent book
+        url_nonexistent = reverse("book_summary", args=[999999])
+        res_nonexistent = self.client.post(url_nonexistent)
+        self.assertEqual(res_nonexistent.status_code, 404)
+
+        # GET request returns 405
+        url_active = reverse("book_summary", args=[self.book.id])
+        res_get = self.client.get(url_active)
+        self.assertEqual(res_get.status_code, 405)
+        self.assertFalse(res_get.json()["ok"])
+
+    @patch("requests.post")
+    def test_rate_limit_returns_429_after_5_generation_calls(self, mock_post):
+        from django.core.cache import cache
+        cache.clear()
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "Sample summary."}]}, "finishReason": "STOP"}]
+        }
+        mock_post.return_value = mock_resp
+
+        # Create 6 distinct books with no cached summary
+        books = [
+            Book.objects.create(
+                title=f"Rate Limit Book {i}",
+                author="Author",
+                category=self.category,
+                price=Decimal("199.00"),
+                stock=5,
+                is_active=True
+            )
+            for i in range(6)
+        ]
+
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            # First 5 generation calls should succeed
+            for i in range(5):
+                res = self.client.post(reverse("book_summary", args=[books[i].id]))
+                self.assertEqual(res.status_code, 200, f"Call {i+1} failed with {res.status_code}")
+                self.assertTrue(res.json()["ok"])
+
+            # 6th generation call should trigger rate limit (429)
+            res6 = self.client.post(reverse("book_summary", args=[books[5].id]))
+            self.assertEqual(res6.status_code, 429)
+            data6 = res6.json()
+            self.assertFalse(data6["ok"])
+            self.assertEqual(data6["error"], "Please wait a moment and try again.")
+
+            # Meanwhile, a book with a cached summary should still be readable
+            cached_book = Book.objects.create(
+                title="Already Cached Book",
+                author="Author",
+                category=self.category,
+                price=Decimal("199.00"),
+                ai_summary="I am already cached.",
+                stock=5,
+                is_active=True
+            )
+            res_cached = self.client.post(reverse("book_summary", args=[cached_book.id]))
+            self.assertEqual(res_cached.status_code, 200)
+            self.assertTrue(res_cached.json()["cached"])
+
+    @patch("requests.post")
+    def test_api_key_never_appears_in_page_html_or_json(self, mock_post):
+        CANARY_KEY = "SUPER_SECRET_GEMINI_CANARY_KEY_XYZ987"
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "Summary of book without leaked key."}]}, "finishReason": "STOP"}]
+        }
+        mock_post.return_value = mock_resp
+
+        with patch.object(settings, "GEMINI_API_KEY", CANARY_KEY):
+            with patch.dict("os.environ", {"GEMINI_API_KEY": CANARY_KEY}):
+                # 1. Book detail page HTML
+                detail_url = reverse("book_detail", args=[self.book.id])
+                res_html = self.client.get(detail_url)
+                self.assertEqual(res_html.status_code, 200)
+                html_content = res_html.content.decode("utf-8")
+                self.assertNotIn(CANARY_KEY, html_content)
+
+                # 2. JSON summary success response
+                summary_url = reverse("book_summary", args=[self.book.id])
+                res_json = self.client.post(summary_url)
+                self.assertEqual(res_json.status_code, 200)
+                json_content = res_json.content.decode("utf-8")
+                self.assertNotIn(CANARY_KEY, json_content)
+
+                # 3. JSON summary error response
+                mock_post.side_effect = requests.exceptions.RequestException(f"Error mentioning {CANARY_KEY}")
+                res_err = self.client.post(summary_url, {"refresh": "1"})
+                err_content = res_err.content.decode("utf-8")
+                self.assertNotIn(CANARY_KEY, err_content)
+
+    def test_frontend_book_detail_ai_elements(self):
+        # 1. Page without summary
+        res = self.client.get(reverse("book_detail", args=[self.book.id]))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, 'id="aiBtn"')
+        self.assertContains(res, 'id="aiOut"')
+        self.assertContains(res, 'aria-live="polite"')
+        self.assertContains(res, reverse("book_summary", args=[self.book.id]))
+        self.assertContains(res, "AI generated, may contain mistakes.")
+        self.assertContains(res, "Generate Summary")
+
+        # 2. Page with cached summary as guest / normal user
+        self.book.ai_summary = "Pre-existing AI summary content."
+        self.book.save(update_fields=["ai_summary"])
+
+        res_cached_guest = self.client.get(reverse("book_detail", args=[self.book.id]))
+        self.assertEqual(res_cached_guest.status_code, 200)
+        self.assertContains(res_cached_guest, "Pre-existing AI summary content.")
+        # Non-staff does not get 'Regenerate summary'
+        self.assertNotContains(res_cached_guest, "Regenerate summary")
+
+        # 3. Page with cached summary as staff
+        self.client.login(username="adminuser", password="password123")
+        res_cached_staff = self.client.get(reverse("book_detail", args=[self.book.id]))
+        self.assertEqual(res_cached_staff.status_code, 200)
+        self.assertContains(res_cached_staff, "Regenerate summary")
+        self.assertContains(res_cached_staff, 'data-refresh="1"')
+
+    @patch("requests.post")
+    def test_admin_clear_and_generate_ai_summary_actions(self, mock_post):
+        from store.admin import BookAdmin
+        from django.contrib.admin.sites import AdminSite
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "Admin generated AI summary."}]}, "finishReason": "STOP"}]
+        }
+        mock_post.return_value = mock_resp
+
+        site = AdminSite()
+        admin_obj = BookAdmin(Book, site)
+
+        # Clear AI summary
+        self.book.ai_summary = "To be cleared"
+        self.book.save()
+        qs = Book.objects.filter(pk=self.book.pk)
+        request = MagicMock()
+        admin_obj.clear_ai_summary(request, qs)
+        self.book.refresh_from_db()
+        self.assertEqual(self.book.ai_summary, "")
+        self.assertIsNone(self.book.ai_summary_updated)
+
+        # Generate AI summary with <= 10 books
+        with patch.object(settings, "GEMINI_API_KEY", "test-key-123"):
+            admin_obj.generate_ai_summary(request, qs)
+            self.book.refresh_from_db()
+            self.assertEqual(self.book.ai_summary, "Admin generated AI summary.")
+            self.assertIsNotNone(self.book.ai_summary_updated)
+
+        # Over 10 books limit
+        large_qs = MagicMock()
+        large_qs.count.return_value = 11
+        admin_obj.generate_ai_summary(request, large_qs)
+        # Should not generate when > 10 selected
+        request.assert_not_called()
+
+
+class SmokeTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name="Fiction", icon="bi-book")
+        self.book = Book.objects.create(
+            title="Smoke Test Book",
+            author="Smoke Author",
+            category=self.category,
+            price=Decimal("299.00"),
+            stock=10,
+            is_active=True
+        )
+        self.user = User.objects.create_user(username="smoketester", password="password123")
+        self.staff_user = User.objects.create_user(username="smokestaff", password="password123", is_staff=True)
+
+    def test_smoke_public_urls_guest_and_user_and_staff_redirect(self):
+        # 1. Guest access to public URLs
+        public_urls_200 = [
+            reverse("home"),
+            reverse("books"),
+            reverse("book_detail", args=[self.book.id]),
+            reverse("cart"),
+            reverse("login"),
+            reverse("register"),
+            reverse("newsletter"),
+        ]
+
+        for url in public_urls_200:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 200, f"Guest failed GET {url}")
+
+        # Non-existent page returns 404
+        res_404 = self.client.get("/this-page-does-not-exist-at-all/")
+        self.assertEqual(res_404.status_code, 404)
+
+        # 2. Staff-only pages redirect guest
+        staff_pages = [
+            reverse("dashboard"),
+            reverse("dashboard_books"),
+            reverse("book_add"),
+        ]
+        for url in staff_pages:
+            res_staff = self.client.get(url)
+            self.assertEqual(res_staff.status_code, 302, f"Guest not redirected from {url}")
+            self.assertIn("/admin/login/", res_staff.url)
+
+        # 3. Logged-in user access
+        self.client.login(username="smoketester", password="password123")
+
+        # General public URLs return 200
+        for url in [reverse("home"), reverse("books"), reverse("book_detail", args=[self.book.id]), reverse("cart"), reverse("newsletter")]:
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 200, f"Logged-in user failed GET {url}")
+
+        # Auth URLs redirect logged-in user to home
+        self.assertEqual(self.client.get(reverse("login")).status_code, 302)
+        self.assertEqual(self.client.get(reverse("register")).status_code, 302)
+
+        # Staff pages still redirect non-staff logged-in user
+        for url in staff_pages:
+            res_staff = self.client.get(url)
+            self.assertEqual(res_staff.status_code, 302)
+            self.assertIn("/admin/login/", res_staff.url)
+
 
 
 
